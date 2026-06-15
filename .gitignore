@@ -1,0 +1,35 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Firebase
+.firebase/
+firebase-debug.log*
+firebase-debug.*.log*
+.firebaserc
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.local
+
+# Logs
+logs/
+*.log
+logs.txt
+logs2.txt
+logs_provider.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+api_test.json
+model_test.json
+test_img.json
+rebuild_prompt.md.resolved

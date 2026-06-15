@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Viky AI</title>
+  <meta name="description" content="Viky AI - Your premium writing assistant, image creator, and chat companion directly in your browser sidebar.">
+  <meta property="og:title" content="Viky AI - Premium Sidebar Assistant">
+  <meta property="og:description" content="Viky AI is a powerful Chrome extension sidepanel featuring translation, transcription, chat, image generation, and smart writing assistance.">
+  <meta property="og:type" content="website">
+  <link rel="stylesheet" href="sidepanel.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Authentication Overlay -->
+  <div id="welcome-screen" class="welcome-screen">
+    <div class="welcome-backdrop"></div>
+    <div class="welcome-content">
+      <div class="welcome-logo">
+        <img src="icons/logo_main_neon.png" alt="Viky AI" class="welcome-logo-img">
+      </div>
+      <h1>Welcome to Viky AI</h1>
+      <p class="welcome-subtitle">Your premium writing companion</p>
+      <p class="welcome-desc">Sign in with your Google account to access AI writing tools, image creation, and more.</p>
+
+      <button id="google-login-btn" class="login-btn">
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        Sign in with Google
+      </button>
+      <div id="login-error" class="login-error hidden"></div>
+    </div>
+  </div>
+
+  <div class="app-layout" id="app-layout" style="display: none;">
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Chat Tab -->
+      <section id="chat" class="tab-pane active">
+        <div class="chat-container">
+          <div class="chat-messages" id="chat-messages">
+            <div class="welcome-block">
+              <div class="welcome-avatar">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9L12 2Z" fill="currentColor"/></svg>
+              </div>
+              <h2>Hi there,</h2>
+              <p>How can I assist you today?</p>
+              <div class="welcome-pills" id="welcome-pills">
+                <button class="pill" data-prompt="Help me write a professional email">Write an email</button>
+                <button class="pill" data-prompt="Summarize the key ideas of the following text:">Summarize text</button>
+                <button class="pill" data-prompt="Improve the clarity and flow of this paragraph">Improve writing</button>
+                <button class="pill" data-prompt="Generate an engaging social media post about">Social post</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <div class="chat-input-toolbar">
+              <div class="model-select-container">
+                <button id="chat-model-pill" class="chat-model-pill" type="button">
+                  <span id="chat-model-pill-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-pill)" xmlns="http://www.w3.org/2000/svg">
+                      <defs>
+                        <linearGradient id="gemini-grad-pill" x1="0%" y1="0%" x2="100%" y2="100%">
+                          <stop offset="0%" stop-color="#ea4335" />
+                          <stop offset="35%" stop-color="#fbbc05" />
+                          <stop offset="65%" stop-color="#34a853" />
+                          <stop offset="100%" stop-color="#4285f4" />
+                        </linearGradient>
+                      </defs>
+                      <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                    </svg>
+                  </span>
+                  <span id="chat-model-pill-name">Gemma 4 26B</span>
+                  <svg class="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                
+                <!-- Popover Menu -->
+                <div id="chat-model-popover" class="chat-model-popover hidden">
+                  <div class="popover-section">
+                    <div class="popover-section-header">Basic (Free)</div>
+                    <div class="popover-items">
+                      <button type="button" class="popover-item active" data-model="google/gemma-4-26b-a4b-it:free" data-name="Gemma 4 26B" data-icon="🤖">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-26b)" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="gemini-grad-26b" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ea4335" />
+                                <stop offset="35%" stop-color="#fbbc05" />
+                                <stop offset="65%" stop-color="#34a853" />
+                                <stop offset="100%" stop-color="#4285f4" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Gemma 4 26B</span>
+                          <span class="item-desc">Default, fast reasoning</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="google/gemma-4-31b-it:free" data-name="Gemma 4 31B" data-icon="🧠">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-31bfree)" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="gemini-grad-31bfree" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ea4335" />
+                                <stop offset="35%" stop-color="#fbbc05" />
+                                <stop offset="65%" stop-color="#34a853" />
+                                <stop offset="100%" stop-color="#4285f4" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Gemma 4 31B</span>
+                          <span class="item-desc">Advanced free reasoning</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="deepseek/deepseek-v4-flash:free" data-name="DeepSeek Flash" data-icon="⚡">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="4.8" fill="#4D6BFE" />
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M23.748 4.482c-.254-.124-.364.113-.512.234-.051.039-.094.09-.137.136-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.156-.708-.311-.955-.65-.172-.241-.219-.51-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.093.172.187.129.323-.082.28-.18.552-.266.833-.055.179-.137.217-.329.14a5.526 5.526 0 01-1.736-1.18c-.857-.828-1.631-1.742-2.597-2.458a11.365 11.365 0 00-.689-.471c-.985-.957.13-1.743.388-1.836.27-.098.093-.432-.779-.428-.872.004-1.67.295-2.687.684a3.055 3.055 0 01-.465.137 9.597 9.597 0 00-2.883-.102c-1.885.21-3.39 1.102-4.497 2.623C.082 8.606-.231 10.684.152 12.85c.403 2.284 1.569 4.175 3.36 5.653 1.858 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.133-.284 4.994-1.86.47.234.962.327 1.78.397.63.059 1.236-.03 1.705-.128.735-.156.684-.837.419-.961-2.155-1.004-1.682-.595-2.113-.926 1.096-1.296 2.746-2.642 3.392-7.003.05-.347.007-.565 0-.845-.004-.17.035-.237.23-.256a4.173 4.173 0 001.545-.475c1.396-.763 1.96-2.015 2.093-3.517.02-.23-.004-.467-.247-.588zM11.581 18c-2.089-1.642-3.102-2.183-3.52-2.16-.392.024-.321.471-.235.763.09.288.207.486.371.739.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.167-1.361-.802-2.5-1.86-3.301-3.307-.774-1.393-1.224-2.887-1.298-4.482-.02-.386.093-.522.477-.592a4.696 4.696 0 011.529-.039c2.132.312 3.946 1.265 5.468 2.774.868.86 1.525 1.887 2.202 2.891.72 1.066 1.494 2.082 2.48 2.914.348.292.625.514.891.677-.802.09-2.14.11-3.054-.614zm1-6.44a.306.306 0 01.415-.287.302.302 0 01.2.288.306.306 0 01-.31.307.303.303 0 01-.304-.308zm3.11 1.596c-.2.081-.399.151-.59.16a1.245 1.245 0 01-.798-.254c-.274-.23-.47-.358-.552-.758a1.73 1.73 0 01.016-.588c.07-.327-.008-.537-.239-.727-.187-.156-.426-.199-.688-.199a.559.559 0 01-.254-.078c-.11-.054-.2-.19-.114-.358.028-.054.16-.186.192-.21.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.391.451.462.576.685.914.176.265.336.537.445.848.067.195-.019.354-.25.452z" fill="white" transform="translate(3.6, 3.6) scale(0.7)" />
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">DeepSeek V4 Flash</span>
+                          <span class="item-desc">High speed reasoning</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="meta-llama/llama-3.3-70b-instruct:free" data-name="Llama 3.3 70B" data-icon="🦙">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="4.8" fill="#0668e1" />
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M6.897 4c1.915 0 3.516.932 5.43 3.376l.282-.373c.19-.246.383-.484.58-.71l.313-.35C14.588 4.788 15.792 4 17.225 4c1.273 0 2.469.557 3.491 1.516l.218.213c1.73 1.765 2.917 4.71 3.053 8.026l.011.392.002.25c0 1.501-.28 2.759-.818 3.7l-.14.23-.108.153c-.301.42-.664.758-1.086 1.009l-.265.142-.087.04a3.493 3.493 0 01-.302.118 4.117 4.117 0 01-1.33.208c-.524 0-.996-.067-1.438-.215-.614-.204-1.163-.56-1.726-1.116l-.227-.235c-.753-.812-1.534-1.976-2.493-3.586l-1.43-2.41-.544-.895-1.766 3.13-.343.592C7.597 19.156 6.227 20 4.356 20c-1.21 0-2.205-.42-2.936-1.182l-.168-.184c-.484-.573-.837-1.311-1.043-2.189l-.067-.32a8.69 8.69 0 01-.136-1.288L0 14.468c.002-.745.06-1.49.174-2.23l.1-.573c.298-1.53.828-2.958 1.536-4.157l.209-.34c1.177-1.83 2.789-3.053 4.615-3.16L6.897 4zm-.033 2.615l-.201.01c-.83.083-1.606.673-2.252 1.577l-.138.199-.01.018c-.67 1.017-1.185 2.378-1.456 3.845l-.004.022a12.591 12.591 0 00-.207 2.254l.002.188c.004.18.017.36.04.54l.043.291c.092.503.257.908.486 1.208l.117.137c.303.323.698.492 1.17.492 1.1 0 1.796-.676 3.696-3.641l2.175-3.4.454-.701-.139-.198C9.11 7.3 8.084 6.616 6.864 6.616zm10.196-.552l-.176.007c-.635.048-1.223.359-1.82.933l-.196.198c-.439.462-.887 1.064-1.367 1.807l.266.398c.18.274.362.56.55.858l.293.475 1.396 2.335.695 1.114c.583.926 1.03 1.6 1.408 2.082l.213.262c.282.326.529.54.777.673l.102.05c.227.1.457.138.718.138.176.002.35-.023.518-.073.338-.104.61-.32.813-.637l.095-.163.077-.162c.194-.459.29-1.06.29-1.785l-.006-.449c-.08-2.871-.938-5.372-2.2-6.798l-.176-.189c-.67-.683-1.444-1.074-2.27-1.074z" fill="white" transform="translate(3.6, 3.6) scale(0.7)" />
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Llama 3.3 70B</span>
+                          <span class="item-desc">Descriptive & smart</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="openrouter/free" data-name="Auto-Route" data-icon="🧭">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Auto-Route Free</span>
+                          <span class="item-desc">Selects best free model</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div class="popover-section">
+                    <div class="popover-section-header">Premium</div>
+                    <div class="popover-items">
+                      <button type="button" class="popover-item" data-model="google/gemma-4-31b-it" data-name="Gemma 4 31B Pro" data-icon="💎">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-31bpaid)" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="gemini-grad-31bpaid" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ea4335" />
+                                <stop offset="35%" stop-color="#fbbc05" />
+                                <stop offset="65%" stop-color="#34a853" />
+                                <stop offset="100%" stop-color="#4285f4" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Gemma 4 31B Pro</span>
+                          <span class="item-desc">Premium reasoning capabilities</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="qwen/qwen3.7-plus" data-name="Qwen 3.7 Plus" data-icon="🇨🇳">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 200 200" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="200" height="200" rx="40" fill="#625cee" />
+                            <path d="M174.82 108.75L155.38 75L165.64 57.75C166.46 56.31 166.46 54.53 165.64 53.09L155.38 35.84C154.86 34.91 153.87 34.33 152.78 34.33H114.88L106.14 19.03C105.62 18.1 104.63 17.52 103.54 17.52H83.3C82.21 17.52 81.22 18.1 80.7 19.03L61.26 52.77H41.02C39.93 52.77 38.94 53.35 38.42 54.28L28.16 71.53C27.34 72.97 27.34 74.75 28.16 76.19L45.52 107.5L36.78 122.8C35.96 124.24 35.96 126.02 36.78 127.46L47.04 144.71C47.56 145.64 48.55 146.22 49.64 146.22H87.54L96.28 161.52C96.8 162.45 97.79 163.03 98.88 163.03H119.12C120.21 163.03 121.2 162.45 121.72 161.52L141.16 127.78H158.52C159.61 127.78 160.6 127.2 161.12 126.27L171.38 109.02C172.2 107.58 172.2 105.8 171.38 104.36L174.82 108.75Z" fill="white"/>
+                            <path d="M119.12 163.03H98.88L87.54 144.71H49.64L61.26 126.39H80.7L38.42 55.29H61.26L83.3 19.03L93.56 37.35L83.3 55.29H161.58L151.32 72.54L170.76 106.28H151.32L141.16 88.34L101.18 163.03H119.12Z" fill="#625cee"/>
+                            <path d="M127.86 79.83H76.14L101.18 122.11L127.86 79.83Z" fill="#625cee"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Qwen 3.7 Plus</span>
+                          <span class="item-desc">Advanced multi-lingual model</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="google/gemini-2.5-flash-preview" data-name="Gemini 2.5 Flash" data-icon="♊">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-25f)" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="gemini-grad-25f" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ea4335" />
+                                <stop offset="35%" stop-color="#fbbc05" />
+                                <stop offset="65%" stop-color="#34a853" />
+                                <stop offset="100%" stop-color="#4285f4" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Gemini 2.5 Flash</span>
+                          <span class="item-desc">High speed multimodal</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="google/gemini-2.5-pro" data-name="Gemini 2.5 Pro" data-icon="🌟">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-25p)" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <linearGradient id="gemini-grad-25p" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#ea4335" />
+                                <stop offset="35%" stop-color="#fbbc05" />
+                                <stop offset="65%" stop-color="#34a853" />
+                                <stop offset="100%" stop-color="#4285f4" />
+                              </linearGradient>
+                            </defs>
+                            <path d="M12 2.5C12 8 16 12 21.5 12C16 12 12 16 12 21.5C12 16 8 12 2.5 12C8 12 12 8 12 2.5z"/>
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Gemini 2.5 Pro</span>
+                          <span class="item-desc">Advanced reasoning</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="anthropic/claude-3.5-sonnet" data-name="Claude 3.5" data-icon="🎭">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="4.8" fill="#d77655" />
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l 3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.31 6.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.43 4 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#fcf2ee" transform="translate(3.6, 3.6) scale(0.7)" />
+                          </svg>
+                        </span>
+                        <div class="item-details">
+                          <span class="item-title">Claude 3.5 Sonnet</span>
+                          <span class="item-desc">Exceptional writing & logic</span>
+                        </div>
+                      </button>
+                      <button type="button" class="popover-item" data-model="openai/gpt-4o-mini" data-name="GPT-4o Mini" data-icon="🌸">
+                        <span class="item-icon">
+                          <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="24" height="24" rx="4.8" fill="#10a37f" />
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z" fill="white" transform="translate(3.6, 3.6) scale(0.7)" />
+                           </svg>
+                         </span>
+                        <div class="item-details">
+                          <span class="item-title">GPT-4o Mini</span>
+                          <span class="item-desc">Fast, balanced assistant</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="input-glass">
+              <textarea id="chat-input" placeholder="Ask anything... (Shift+Enter for new line)" rows="1"></textarea>
+              <div class="input-actions">
+                <button id="clear-chat-btn" class="icon-btn ghost" title="Clear conversation">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+                <button id="send-btn" class="send-btn" title="Send">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="22" y1="2" x2="11" y2="13"/>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Image Tab -->
+      <section id="image" class="tab-pane">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <h2>Image Studio</h2>
+            <p class="section-subtitle">Create visuals from your imagination</p>
+          </div>
+          <img src="icons/logo_draw_neon.png" alt="Image Studio" class="studio-logo-img">
+        </div>
+        <div class="image-container">
+          <div class="image-result" id="image-result">
+            <div class="placeholder-content">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.25">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+              <p>Your image will appear here</p>
+            </div>
+          </div>
+          <div class="image-actions hidden" id="image-actions">
+            <button class="action-btn" id="download-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download
+            </button>
+            <button class="action-btn" id="copy-image-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="image-input-section">
+            <textarea id="image-prompt" placeholder="Describe your image in detail..." rows="2"></textarea>
+            <div class="style-row">
+              <div class="style-buttons">
+                <button class="style-btn active" data-style="natural">Natural</button>
+                <button class="style-btn" data-style="vivid">Vivid</button>
+                <button class="style-btn" data-style="anime">Anime</button>
+                <button class="style-btn" data-style="cyberpunk">Cyberpunk</button>
+                <button class="style-btn" data-style="3d">3D Render</button>
+              </div>
+              <button id="generate-btn" class="generate-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Generate
+              </button>
+            </div>
+            <div class="image-history" id="image-history"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tools Tab -->
+      <section id="tools" class="tab-pane">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <h2>Writing Tools</h2>
+            <p class="section-subtitle">Select text on any page, then use these tools</p>
+          </div>
+          <img src="icons/logo_write_neon.png" alt="Writing Tools" class="tools-logo-img">
+        </div>
+        <div class="tools-container">
+          <div class="tools-grid">
+            <button class="tool-card" data-action="IMPROVE">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+              <span class="tool-name">Improve</span>
+              <span class="tool-desc">Clarity & flow</span>
+            </button>
+            <button class="tool-card" data-action="FIX_GRAMMAR">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></div>
+              <span class="tool-name">Grammar</span>
+              <span class="tool-desc">Fix errors</span>
+            </button>
+            <button class="tool-card" data-action="SHORTEN">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+              <span class="tool-name">Shorten</span>
+              <span class="tool-desc">Concise version</span>
+            </button>
+            <button class="tool-card" data-action="EXPAND">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+              <span class="tool-name">Expand</span>
+              <span class="tool-desc">More detail</span>
+            </button>
+            <button class="tool-card" data-action="TONE_CASUAL">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/></svg></div>
+              <span class="tool-name">Casual</span>
+              <span class="tool-desc">Friendly tone</span>
+            </button>
+            <button class="tool-card" data-action="TONE_FORMAL">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></div>
+              <span class="tool-name">Formal</span>
+              <span class="tool-desc">Professional</span>
+            </button>
+            <button class="tool-card" data-action="SUMMARIZE">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h8"/></svg></div>
+              <span class="tool-name">Summarize</span>
+              <span class="tool-desc">Key takeaways</span>
+            </button>
+            <button class="tool-card" data-action="KEY_POINTS">
+              <div class="tool-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+              <span class="tool-name">Key Points</span>
+              <span class="tool-desc">Bullet list</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Templates Tab -->
+      <section id="templates" class="tab-pane">
+        <div class="section-header">
+          <div>
+            <h2>Templates</h2>
+            <p class="section-subtitle">One-click prompt starters for common tasks</p>
+          </div>
+        </div>
+        <div class="templates-container">
+          <div class="templates-grid">
+            <button class="template-card" data-prompt="Write a professional, concise email about the following topic:">
+              <div class="template-icon">&#9993;</div>
+              <span class="template-title">Professional Email</span>
+              <span class="template-desc">Formal business communication</span>
+            </button>
+            <button class="template-card" data-prompt="Create an engaging social media post for the following idea:">
+              <div class="template-icon">&#128172;</div>
+              <span class="template-title">Social Media Post</span>
+              <span class="template-desc">Catchy captions & hooks</span>
+            </button>
+            <button class="template-card" data-prompt="Draft a blog article outline with headings and key points for the topic:">
+              <div class="template-icon">&#128196;</div>
+              <span class="template-title">Blog Outline</span>
+              <span class="template-desc">Structured long-form content</span>
+            </button>
+            <button class="template-card" data-prompt="Write a short creative story based on the following prompt:">
+              <div class="template-icon">&#128220;</div>
+              <span class="template-title">Creative Story</span>
+              <span class="template-desc">Narrative & fiction</span>
+            </button>
+            <button class="template-card" data-prompt="Explain the following concept in very simple terms as if to a beginner:">
+              <div class="template-icon">&#128161;</div>
+              <span class="template-title">Simple Explainer</span>
+              <span class="template-desc">Easy-to-understand breakdown</span>
+            </button>
+            <button class="template-card" data-prompt="Summarize meeting notes into clear action items and decisions:">
+              <div class="template-icon">&#128203;</div>
+              <span class="template-title">Meeting Notes</span>
+              <span class="template-desc">Actions & decisions</span>
+            </button>
+            <button class="template-card" data-prompt="Write a compelling resume summary highlighting the following achievements:">
+              <div class="template-icon">&#128188;</div>
+              <span class="template-title">Resume Summary</span>
+              <span class="template-desc">Professional highlights</span>
+            </button>
+            <button class="template-card" data-prompt="Help me structure an academic essay with introduction, body, and conclusion on the topic:">
+              <div class="template-icon">&#127891;</div>
+              <span class="template-title">Academic Essay</span>
+              <span class="template-desc">Structured scholarly writing</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transcribe Tab -->
+      <section id="transcribe" class="tab-pane">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <h2>Audio Transcription</h2>
+            <p class="section-subtitle">Convert speech to text with AI</p>
+          </div>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.85">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <div class="transcribe-container">
+          <!-- Audio Source Card -->
+          <div class="transcribe-source-card">
+            <!-- Record Section -->
+            <div class="transcribe-record-section">
+              <button id="transcribe-record-btn" class="record-btn" title="Record audio">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+              </button>
+              <div class="record-timer" id="transcribe-record-timer">00:00</div>
+              <div class="record-status" id="transcribe-record-status">Click to record</div>
+              <div class="waveform-bars hidden" id="transcribe-waveform-bars">
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div class="transcribe-divider">or</div>
+
+            <!-- Upload Section -->
+            <div class="transcribe-upload-zone" id="transcribe-upload-zone">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <p class="upload-hint">Drop audio file here</p>
+              <p class="upload-formats">MP3, WAV, M4A, WebM, OGG, FLAC (max 25MB)</p>
+              <button class="upload-browse-btn" id="transcribe-browse-btn">Browse files</button>
+              <input type="file" id="transcribe-file-input" accept=".mp3,.wav,.m4a,.webm,.ogg,.flac,audio/*" class="hidden">
+            </div>
+          </div>
+
+          <!-- Audio Preview (hidden initially) -->
+          <div class="transcribe-audio-preview" id="transcribe-audio-preview">
+            <canvas class="audio-waveform-canvas" id="transcribe-waveform-canvas" width="400" height="48"></canvas>
+            <div class="audio-info">
+              <span class="audio-filename" id="transcribe-audio-filename">audio.wav</span>
+              <span class="audio-duration" id="transcribe-audio-duration">0:00</span>
+              <button class="audio-remove-btn" id="transcribe-audio-remove" title="Remove audio">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Transcribe Button -->
+          <button id="transcribe-btn" class="transcribe-btn" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+            Transcribe
+          </button>
+
+          <!-- Transcript Result (hidden initially) -->
+          <div class="transcribe-result" id="transcribe-result">
+            <div class="transcript-output" id="transcribe-output"></div>
+            <div class="transcript-actions">
+              <button class="transcript-action-btn" id="transcribe-copy-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy
+              </button>
+              <button class="transcript-action-btn" id="transcribe-send-chat-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Send to Chat
+              </button>
+              <button class="transcript-action-btn" id="transcribe-download-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+              </button>
+            </div>
+          </div>
+
+          <!-- Transcript History -->
+          <div class="transcribe-history" id="transcribe-history">
+            <h4 class="transcribe-history-title">Recent Transcriptions</h4>
+            <div class="transcribe-history-list" id="transcribe-history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings Tab -->
+      <section id="settings" class="tab-pane">
+        <div class="section-header">
+          <h2>Settings</h2>
+        </div>
+        <div class="settings-hud-layout">
+          <!-- Left Column: HUD sub-navigation -->
+          <div class="settings-sidebar">
+            <button class="settings-subtab active" data-settings-subtab="general">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <span>General</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="whatsapp">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+              <span>WhatsApp</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="ai-studio">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <span>AI & Studio</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="web-assistant">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <span>Web AI</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="floating-widget">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/></svg>
+              <span>Floating UI</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="templates-mgmt">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+              <span>Templates</span>
+            </button>
+            <button class="settings-subtab" data-settings-subtab="subscription">
+              <svg class="subtab-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+              <span>Subscription</span>
+            </button>
+            <button id="logout-btn" class="logout-link">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <span>Sign Out</span>
+            </button>
+          </div>
+
+          <!-- Right Column: Settings Content Panes -->
+          <div class="settings-content-wrapper">
+            
+            <!-- Pane 1: General Settings -->
+            <div class="settings-subpane active" id="settings-general">
+              <div class="settings-card">
+                <h3>Account Access</h3>
+                <div class="account-card">
+                  <div class="account-info">
+                    <div class="account-avatar">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    </div>
+                    <div class="account-details">
+                      <div class="account-name" id="user-email">Google Account</div>
+                      <div class="account-badge">Pro Access</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h3>General Preferences</h3>
+                <div class="setting-item">
+                  <label class="toggle-label">
+                    <span>Dark Theme</span>
+                    <input type="checkbox" id="theme-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+                <div class="setting-item">
+                  <label class="toggle-label">
+                    <span>Spell Check</span>
+                    <input type="checkbox" id="spellcheck-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+                <div class="setting-item">
+                  <label for="default-language">Default Language</label>
+                  <select id="default-language">
+                    <option value="English">English</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Chinese">Chinese</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Arabic">Arabic</option>
+                    <option value="Russian">Russian</option>
+                  </select>
+                </div>
+                <button id="save-settings-btn" class="save-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save General Preferences
+                </button>
+              </div>
+
+              <div class="settings-card about">
+                <p><strong>Viky AI</strong> v1.2</p>
+                <p class="muted">Premium writing assistant & creative studio</p>
+              </div>
+            </div>
+
+            <!-- Pane 2: WhatsApp Web Enhancements -->
+            <div class="settings-subpane" id="settings-whatsapp">
+              <div class="whatsapp-container" style="padding:0;">
+                <div class="tab-header">
+                  <h3>WhatsApp Enhancements</h3>
+                  <p class="subtitle">Personalize your WhatsApp Web privacy and interface</p>
+                </div>
+
+                <!-- Section 1: Private Mode -->
+                <div class="settings-card">
+                  <div class="card-header-toggle">
+                    <h4>Private Mode</h4>
+                    <label class="toggle-label">
+                      <input type="checkbox" id="wa-private-mode-toggle">
+                      <span class="toggle-switch"></span>
+                    </label>
+                  </div>
+                  <p class="section-desc">Anti screen and status spying features</p>
+                  
+                  <div class="settings-options" id="wa-private-options">
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-blur-names">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Blur contact names</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-blur-photos">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Blur contact photos</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-blur-recent">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Blur recent messages</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-blur-conversation">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Blur conversation messages</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-hide-typing">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Hide typing status</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-hide-recording">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Hide recording status</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-view-statuses-privately">
+                      <span class="checkmark"></span>
+                      <span class="option-label">View statuses privately</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-play-audio-privately">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Play audio messages privately</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-disable-read-receipts">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Disable read receipts</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-hide-online">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Hide online status (Invisible Mode)</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-restore-deleted">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Restore deleted messages</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Section 2: Customizations -->
+                <div class="settings-card">
+                  <div class="card-header-toggle">
+                    <h4>Customizations</h4>
+                    <label class="toggle-label">
+                      <input type="checkbox" id="wa-customizations-toggle">
+                      <span class="toggle-switch"></span>
+                    </label>
+                  </div>
+                  <p class="section-desc">Apply visual custom styles to your chats</p>
+                  
+                  <div class="settings-options" id="wa-custom-options">
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-custom-background">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Set custom chat background image</span>
+                    </label>
+                    
+                    <div class="input-group hidden" id="wa-background-url-container">
+                      <label for="wa-background-url">Background Image URL</label>
+                      <input type="text" id="wa-background-url" placeholder="https://example.com/image.png">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section 3: Extra Buttons -->
+                <div class="settings-card">
+                  <div class="card-header-toggle">
+                    <h4>Extra Buttons</h4>
+                    <label class="toggle-label">
+                      <input type="checkbox" id="wa-extra-buttons-toggle">
+                      <span class="toggle-switch"></span>
+                    </label>
+                  </div>
+                  <p class="section-desc">Add new buttons with additional features</p>
+                  
+                  <div class="settings-options" id="wa-extra-options">
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-like-button">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Like button</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-mark-read-unread">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Mark conversation as read/unread</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-transcribe-audio">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Transcribe audio messages button</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-translate-message">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Translate message button</span>
+                    </label>
+                    
+                    <label class="checkbox-option">
+                      <input type="checkbox" id="wa-download-status">
+                      <span class="checkmark"></span>
+                      <span class="option-label">Download status button</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button id="save-wa-settings-btn" class="save-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save WhatsApp Preferences
+                </button>
+              </div>
+            </div>
+
+            <!-- Pane 3: AI & Studio Preferences -->
+            <div class="settings-subpane" id="settings-ai-studio">
+              <div class="settings-card">
+                <h3>AI Model Selection</h3>
+                <div class="setting-item">
+                  <label for="model-selector">AI Model</label>
+                  <select id="model-selector">
+                    <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 Flash (Free)</option>
+                    <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Free)</option>
+                    <option value="google/gemma-4-31b-it">Gemma 4 31B Pro</option>
+                    <option value="qwen/qwen3.7-plus">Qwen 3.7 Plus</option>
+                    <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
+                    <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                  </select>
+                  <p class="hint">Select the model for text generation</p>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h3>Image Studio Defaults</h3>
+                <div class="setting-item">
+                  <label for="default-image-style">Default Style</label>
+                  <select id="default-image-style">
+                    <option value="natural">Natural</option>
+                    <option value="vivid">Vivid</option>
+                    <option value="anime">Anime</option>
+                    <option value="cyberpunk">Cyberpunk</option>
+                    <option value="3d">3D Render</option>
+                  </select>
+                  <p class="hint">Initial style pre-selected in Image Studio</p>
+                </div>
+                <button id="save-ai-settings-btn" class="save-btn">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                  Save AI & Studio Preferences
+                </button>
+              </div>
+            </div>
+
+            <!-- Pane: Web Assistant Settings -->
+            <div class="settings-subpane" id="settings-web-assistant">
+
+              <!-- For Search -->
+              <div class="wa-feature-card">
+                <h3 class="wa-feature-title">For search</h3>
+                <div class="wa-feature-preview wa-preview-search">
+                  <div class="wa-mock-search">
+                    <div class="wa-mock-bar"><span class="wa-mock-logo">Google</span><span class="wa-mock-input">ChatGPT</span></div>
+                    <div class="wa-mock-results">
+                      <div class="wa-mock-line w80"></div>
+                      <div class="wa-mock-line w60"></div>
+                      <div class="wa-mock-line w90"></div>
+                      <div class="wa-mock-line w50"></div>
+                      <div class="wa-mock-line w70"></div>
+                    </div>
+                  </div>
+                  <div class="wa-mock-sidebar">
+                    <div class="wa-mock-sidebar-header">
+                      <img src="icons/logo_cute_neon.png" alt="Viky" class="wa-mock-logo-img">
+                      <span>Viky AI</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:auto;opacity:0.4;"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+                    </div>
+                    <div class="wa-mock-sidebar-body">
+                      <div class="wa-mock-line w90"></div>
+                      <div class="wa-mock-line w80"></div>
+                      <div class="wa-mock-line w70"></div>
+                      <div class="wa-mock-line w85"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wa-feature-control">
+                  <span>Show AI answer alongside search results</span>
+                  <label class="toggle-label">
+                    <input type="checkbox" id="wa-search-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+                <div class="wa-radio-group" id="wa-search-trigger-group">
+                  <label class="wa-radio-option">
+                    <input type="radio" name="wa-search-trigger" value="always" checked>
+                    <span class="wa-radio-dot"></span>
+                    <span>Always</span>
+                  </label>
+                  <label class="wa-radio-option">
+                    <input type="radio" name="wa-search-trigger" value="question_mark">
+                    <span class="wa-radio-dot"></span>
+                    <span>When query ends with a question mark</span>
+                  </label>
+                  <label class="wa-radio-option">
+                    <input type="radio" name="wa-search-trigger" value="manual_click">
+                    <span class="wa-radio-dot"></span>
+                    <span>When answer button is clicked</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- For YouTube -->
+              <div class="wa-feature-card">
+                <h3 class="wa-feature-title">For YouTube</h3>
+                <div class="wa-feature-preview wa-preview-youtube">
+                  <div class="wa-mock-video">
+                    <div class="wa-mock-player"></div>
+                  </div>
+                  <div class="wa-mock-sidebar wa-mock-yt-sidebar">
+                    <div class="wa-mock-sidebar-header">
+                      <img src="icons/logo_cute_neon.png" alt="Viky" class="wa-mock-logo-img">
+                      <span>Viky AI</span>
+                    </div>
+                    <button class="wa-mock-yt-btn primary">Summarize Video</button>
+                    <button class="wa-mock-yt-btn outline">✦ Watch Highlights</button>
+                    <div class="wa-mock-yt-lines">
+                      <div class="wa-mock-line w80"></div>
+                      <div class="wa-mock-line w60"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wa-feature-control">
+                  <span>Show summary panel on YouTube</span>
+                  <label class="toggle-label">
+                    <input type="checkbox" id="wa-youtube-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- For Link Previews -->
+              <div class="wa-feature-card">
+                <h3 class="wa-feature-title">For link previews</h3>
+                <div class="wa-feature-preview wa-preview-links">
+                  <div class="wa-mock-page">
+                    <div class="wa-mock-line w80"></div>
+                    <div class="wa-mock-line w60"></div>
+                    <a class="wa-mock-link" href="#" draggable="false">This is an example link</a>
+                    <div class="wa-mock-line w70"></div>
+                  </div>
+                  <div class="wa-mock-link-preview">
+                    <div class="wa-mock-lp-header">
+                      <span>✦ Summary</span>
+                      <span class="wa-mock-lp-auto">Auto Summarize <span class="wa-mock-toggle-mini active"></span></span>
+                    </div>
+                    <div class="wa-mock-lp-body">
+                      <div class="wa-mock-line w90"></div>
+                      <div class="wa-mock-line w80"></div>
+                      <div class="wa-mock-line w70"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="wa-feature-control">
+                  <span>Display link preview window when dragging a link</span>
+                  <label class="toggle-label">
+                    <input type="checkbox" id="wa-linkpreview-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- For Email -->
+              <div class="wa-feature-card">
+                <h3 class="wa-feature-title">For email</h3>
+                <div class="wa-feature-preview wa-preview-email">
+                  <div class="wa-mock-email">
+                    <div class="wa-mock-line w90"></div>
+                    <div class="wa-mock-line w80"></div>
+                    <div class="wa-mock-line w50"></div>
+                    <div class="wa-mock-email-actions">
+                      <button class="wa-mock-email-btn">↩ Reply</button>
+                      <button class="wa-mock-email-btn">↪ Forward</button>
+                      <button class="wa-mock-email-btn emoji">😊</button>
+                      <button class="wa-mock-email-btn ai-reply">
+                        <img src="icons/logo_cute_neon.png" alt="AI" class="wa-mock-ai-icon">
+                        AI Reply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="wa-feature-control">
+                  <span>Show AI Reply button in Gmail</span>
+                  <label class="toggle-label">
+                    <input type="checkbox" id="wa-email-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Pane 4: Floating Widget & Blacklist -->
+            <div class="settings-subpane" id="settings-floating-widget">
+              <div class="settings-card">
+                <h3>Floating Widget Options</h3>
+                <div class="setting-item">
+                  <label class="toggle-label">
+                    <span>Show Floating Button on Selection</span>
+                    <input type="checkbox" id="show-floating-toggle" checked>
+                    <span class="toggle-switch"></span>
+                  </label>
+                </div>
+                <div class="setting-item" style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 12px; width: 100%;">
+                  <span style="font-weight: 500; font-size: 13px;">Highlight Color</span>
+                  <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                    <!-- Presets Selection Row -->
+                    <div class="color-presets" style="display: flex; gap: 8px; align-items: center; width: 100%;">
+                      <button class="color-preset-btn" data-color="#facc15" style="background-color: #facc15; border: 2px solid transparent; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: all 0.2s; padding: 0;" title="Yellow"></button>
+                      <button class="color-preset-btn" data-color="#4ade80" style="background-color: #4ade80; border: 2px solid transparent; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: all 0.2s; padding: 0;" title="Green"></button>
+                      <button class="color-preset-btn" data-color="#60a5fa" style="background-color: #60a5fa; border: 2px solid transparent; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: all 0.2s; padding: 0;" title="Blue"></button>
+                      <button class="color-preset-btn" data-color="#f87171" style="background-color: #f87171; border: 2px solid transparent; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: all 0.2s; padding: 0;" title="Red"></button>
+                      <button class="color-preset-btn" data-color="#fb923c" style="background-color: #fb923c; border: 2px solid transparent; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; transition: all 0.2s; padding: 0;" title="Orange"></button>
+                    </div>
+                    <!-- Custom Input Row -->
+                    <div style="display: flex; align-items: center; gap: 8px; border-top: 1px dashed rgba(255,255,255,0.06); padding-top: 8px; width: 100%;">
+                      <span style="font-size: 11px; color: var(--text-secondary);">Custom Color:</span>
+                      <input type="color" id="highlight-color-custom" value="#facc15" style="border: 1px solid var(--border-color); width: 36px; height: 24px; padding: 0; background: transparent; cursor: pointer; border-radius: 4px; outline: none; vertical-align: middle;">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h3>Domain Blacklist</h3>
+                <p class="hint">Disable the floating selection button on specific websites.</p>
+                
+                <div class="blacklist-input-group">
+                  <input type="text" id="blacklist-domain-input" placeholder="e.g. wikipedia.org">
+                  <button id="add-blacklist-btn" class="save-btn" style="margin-top:0; width:auto; padding: 0 16px;">Add</button>
+                </div>
+
+                <div id="blacklist-domain-list" class="blacklist-list">
+                  <!-- Dynamically populated list of domains -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 5: Writing Templates Manager -->
+            <div class="settings-subpane" id="settings-templates-mgmt">
+              <div class="settings-card">
+                <h3>Create Custom Template</h3>
+                
+                <div class="template-form">
+                  <div class="setting-item flex-col">
+                    <label for="template-title-input">Template Title</label>
+                    <input type="text" id="template-title-input" placeholder="e.g. Code Reviewer">
+                  </div>
+                  
+                  <div class="setting-item flex-col">
+                    <label for="template-icon-input">Emoji Icon</label>
+                    <input type="text" id="template-icon-input" placeholder="e.g. 🔍" maxlength="2">
+                  </div>
+                  
+                  <div class="setting-item flex-col">
+                    <label for="template-prompt-input">Prompt Starter</label>
+                    <textarea id="template-prompt-input" rows="3" placeholder="Write a detailed code review for the following code..."></textarea>
+                  </div>
+
+                  <button id="save-template-btn" class="save-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Template
+                  </button>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <h3>Your Custom Templates</h3>
+                <div id="custom-templates-list" class="custom-templates-mgmt-list">
+                  <!-- Dynamically populated custom templates with edit/delete buttons -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Pane 6: Subscription Management -->
+            <div class="settings-subpane" id="settings-subscription">
+              <div class="settings-card">
+                <div class="sub-header-row">
+                  <h3>Your Plan</h3>
+                  <span class="sub-current-badge" id="sub-current-badge">Free</span>
+                </div>
+                <div class="sub-credits-row" id="sub-credits-row">
+                  <div class="sub-credit-chip">
+                    <span class="sub-credit-label">Basic</span>
+                    <span class="sub-credit-value" id="sub-basic-credits">50</span>
+                  </div>
+                  <div class="sub-credit-chip">
+                    <span class="sub-credit-label">Advanced</span>
+                    <span class="sub-credit-value" id="sub-advanced-credits">0</span>
+                  </div>
+                  <div class="sub-credit-chip">
+                    <span class="sub-credit-label">Elite</span>
+                    <span class="sub-credit-value" id="sub-elite-credits">0</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="sub-header-row">
+                  <h3>Upgrade Plan</h3>
+                  <div class="sub-billing-toggle" id="sub-billing-toggle">
+                    <button class="sub-billing-btn active" data-billing="monthly">Monthly</button>
+                    <button class="sub-billing-btn" data-billing="yearly">Yearly <span class="sub-save-tag">Save ~20%</span></button>
+                  </div>
+                </div>
+
+                <div class="sub-pricing-grid" id="sub-pricing-grid">
+                  <!-- Basic -->
+                  <div class="sub-plan-card" data-tier="basic">
+                    <div class="sub-plan-name">Basic</div>
+                    <div class="sub-plan-price">
+                      <span class="sub-price-amount" data-monthly="$8.30" data-yearly="$99">$8.30</span>
+                      <span class="sub-price-period" data-monthly="/mo" data-yearly="/yr">/mo</span>
+                    </div>
+                    <ul class="sub-plan-features">
+                      <li>3,600 Basic Credits / mo</li>
+                      <li>200 Advanced Credits / mo</li>
+                      <li>80 Elite Credits / mo</li>
+                      <li>GPT-5.4 mini, Gemini 3.0 Flash</li>
+                      <li>Basic Image & Video gen</li>
+                    </ul>
+                    <button class="sub-plan-btn" data-tier="basic">Subscribe</button>
+                  </div>
+
+                  <!-- Plus -->
+                  <div class="sub-plan-card popular" data-tier="plus">
+                    <div class="sub-popular-tag">Most Popular</div>
+                    <div class="sub-plan-name">Plus</div>
+                    <div class="sub-plan-price">
+                      <span class="sub-price-amount" data-monthly="$16.20" data-yearly="$194.35">$16.20</span>
+                      <span class="sub-price-period" data-monthly="/mo" data-yearly="/yr">/mo</span>
+                    </div>
+                    <ul class="sub-plan-features">
+                      <li>Unlimited Basic Credits</li>
+                      <li>1,500 Advanced Credits / mo</li>
+                      <li>250 Elite Credits / mo</li>
+                      <li>All Basic models + GPT-4o, Claude</li>
+                      <li>Priority support</li>
+                    </ul>
+                    <button class="sub-plan-btn" data-tier="plus">Subscribe</button>
+                  </div>
+
+                  <!-- Ultra -->
+                  <div class="sub-plan-card" data-tier="ultra">
+                    <div class="sub-plan-name">Ultra</div>
+                    <div class="sub-plan-price">
+                      <span class="sub-price-amount" data-monthly="$133.30" data-yearly="$1,599">$133.30</span>
+                      <span class="sub-price-period" data-monthly="/mo" data-yearly="/yr">/mo</span>
+                    </div>
+                    <ul class="sub-plan-features">
+                      <li>Unlimited Basic Credits</li>
+                      <li>10,000 Advanced Credits / mo</li>
+                      <li>2,500 Elite Credits / mo</li>
+                      <li>All models including GPT-5, o3</li>
+                      <li>API access + Team features</li>
+                    </ul>
+                    <button class="sub-plan-btn" data-tier="ultra">Subscribe</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sub-status-msg hidden" id="sub-status-msg"></div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Right Sidebar Nav -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <img src="icons/logo_main_neon.png" alt="Viky AI" class="brand-icon-img">
+        </div>
+        <span class="brand-text">Viky</span>
+      </div>
+
+      <div class="sidebar-spacer"></div>
+
+      <div class="sidebar-icons">
+        <button class="nav-icon active" data-tab="chat" title="Chat">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="nav-label">Chat</span>
+        </button>
+        <button class="nav-icon" data-tab="image" title="Image">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span class="nav-label">Image</span>
+        </button>
+        <button class="nav-icon" data-tab="tools" title="Tools">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          <span class="nav-label">Tools</span>
+        </button>
+        <button class="nav-icon" data-tab="templates" title="Templates">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+          <span class="nav-label">Templates</span>
+        </button>
+        <button class="nav-icon" data-tab="transcribe" title="Transcribe">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <span class="nav-label">Transcribe</span>
+        </button>
+
+        <div class="nav-divider"></div>
+
+        <button class="nav-icon" data-tab="settings" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="nav-label">Settings</span>
+        </button>
+      </div>
+    </nav>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

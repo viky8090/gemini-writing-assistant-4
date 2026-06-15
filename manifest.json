@@ -1,0 +1,75 @@
+{
+  "manifest_version": 3,
+  "name": "Viky AI - Smart Writing Assistant",
+  "version": "1.2",
+  "description": "AI-powered writing assistant with text improvement, translation, and image generation tools",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "contextMenus",
+    "identity",
+    "tabs",
+    "audioCapture"
+  ],
+  "oauth2": {
+    "client_id": "307924060680-qk00eperbhs4ushs8javolhb1bkvfblb.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
+  "host_permissions": [
+    "https://image.pollinations.ai/*",
+    "https://us-central1-viky-ai-backend.cloudfunctions.net/*",
+    "https://www.youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Viky AI",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "spellcheck.js",
+        "content.js",
+        "web_assistant.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "whatsapp_content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["lib/*", "dict/*", "whatsapp_inject.js", "youtube_inject.js", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
