@@ -14,6 +14,10 @@
   // Theme-aware CSS vars (injected into each shadow root)
   const SHARED_CSS = `
     :host {
+      --accent-faint: rgba(0, 255, 157, 0.06);
+      --accent-medium: rgba(0, 255, 157, 0.15);
+      --accent-border: rgba(0, 255, 157, 0.4);
+
       --viky-bg: #1a1a2e;
       --viky-bg2: #16213e;
       --viky-border: rgba(255,255,255,0.08);
@@ -132,7 +136,7 @@
       // Get the selected model from storage before sending
       chrome.storage.local.get(['selectedModel'], (result) => {
         if (hasCompleted) return; // Already timed out or disconnected
-        const model = result.selectedModel || 'google/gemma-4-26b-a4b-it:free';
+        const model = result.selectedModel || 'meta-llama/llama-3.3-70b-instruct:free';
         port.postMessage({
           action: 'CHAT_MESSAGE',
           message: prompt,
@@ -259,7 +263,7 @@
       }
       .trigger-btn:hover {
         border-color: var(--viky-accent);
-        box-shadow: 0 2px 12px rgba(0,255,157,0.12);
+        box-shadow: 0 2px 12px var(--accent-soft);
       }
       .trigger-btn img { width: 18px; height: 18px; border-radius: 4px; }
     `;
@@ -1177,7 +1181,7 @@ Description: "${desc}"
         padding: 4px 12px;
         margin-left: 6px;
         background: rgba(0,255,157,0.1);
-        border: 1px solid rgba(0,255,157,0.25);
+        border: 1px solid var(--accent-glow);
         border-radius: 16px;
         color: #00ff9d;
         font-size: 12px;
@@ -1190,11 +1194,11 @@ Description: "${desc}"
 
       aiBtn.addEventListener('mouseenter', () => {
         aiBtn.style.background = 'rgba(0,255,157,0.18)';
-        aiBtn.style.borderColor = 'rgba(0,255,157,0.4)';
+        aiBtn.style.borderColor = 'var(--accent-border)';
       });
       aiBtn.addEventListener('mouseleave', () => {
         aiBtn.style.background = 'rgba(0,255,157,0.1)';
-        aiBtn.style.borderColor = 'rgba(0,255,157,0.25)';
+        aiBtn.style.borderColor = 'var(--accent-glow)';
       });
 
       aiBtn.addEventListener('click', (e) => {

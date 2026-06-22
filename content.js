@@ -20,6 +20,9 @@
     --accent-primary-hover: #00cc7d;
     --accent-primary-light: rgba(0, 255, 157, 0.1);
     --accent-glow: rgba(0, 255, 157, 0.25);
+    --accent-medium: rgba(0, 255, 157, 0.15);
+    --accent-faint: rgba(0, 255, 157, 0.06);
+    --accent-border: rgba(0, 255, 157, 0.4);
 
     --text-primary: #ffffff;
     --text-secondary: #a1a1aa;
@@ -27,7 +30,7 @@
 
     --border-color: rgba(255, 255, 255, 0.08);
     --border-light: rgba(255, 255, 255, 0.12);
-    --border-focus: rgba(0, 255, 157, 0.4);
+    --border-focus: var(--accent-border);
 
     --success: #00ff9d;
     --error: #ef4444;
@@ -72,6 +75,9 @@
     --accent-primary-hover: #047857;
     --accent-primary-light: rgba(5, 150, 105, 0.1);
     --accent-glow: rgba(5, 150, 105, 0.2);
+    --accent-medium: rgba(5, 150, 105, 0.15);
+    --accent-faint: rgba(5, 150, 105, 0.06);
+    --accent-border: rgba(5, 150, 105, 0.4);
 
     --text-primary: #111827;
     --text-secondary: #4b5563;
@@ -877,7 +883,7 @@
 }
 .suggestion-btn.accept:active {
     transform: scale(0.96);
-    box-shadow: 0 1px 4px var(--accent-glow, rgba(0, 255, 157, 0.15));
+    box-shadow: 0 1px 4px var(--accent-glow, var(--accent-medium));
 }
 
 /* Fix All section */
@@ -900,7 +906,7 @@
     cursor: pointer;
     background: linear-gradient(135deg, var(--accent-primary), #00d4aa);
     color: var(--bg-surface);
-    box-shadow: 0 2px 10px var(--accent-glow, rgba(0, 255, 157, 0.25));
+    box-shadow: 0 2px 10px var(--accent-glow, var(--accent-glow));
     transition: all 0.2s ease;
 }
 .suggestion-btn.fix-all svg {
@@ -909,7 +915,7 @@
     flex-shrink: 0;
 }
 .suggestion-btn.fix-all:hover {
-    box-shadow: 0 4px 20px var(--accent-glow, rgba(0, 255, 157, 0.4));
+    box-shadow: 0 4px 20px var(--accent-glow, var(--accent-border));
     transform: translateY(-1px);
 }
 .suggestion-btn.fix-all:active {
@@ -1122,6 +1128,29 @@
                     selectionRange = selection.getRangeAt(0).cloneRange();
                 }
                 handleToolAction(request.type, null);
+                return;
+            }
+
+            if (request.action === 'PERFORM_ACTION') {
+                // Triggered by the Tools tab cards in the sidepanel.
+                // The page's current selection is the source text.
+                const sel = window.getSelection();
+                const text = sel ? sel.toString().trim() : '';
+
+                if (!text) {
+                    showSelectTextNotification();
+                    if (sendResponse) sendResponse({ success: false, error: 'No text selected on the page.' });
+                    return;
+                }
+
+                selectedText = text;
+                if (sel.rangeCount > 0) {
+                    selectionRange = sel.getRangeAt(0).cloneRange();
+                }
+
+                handleToolAction(request.toolAction, request.lang || null);
+                if (sendResponse) sendResponse({ success: true });
+                return;
             }
         });
 
@@ -1742,10 +1771,10 @@
     }
 
     function showResultPanel() {
-        // Toggle Replace button visibility based on context
+        // Always show Replace button - works on both editable and non-editable content
         const replaceBtn = resultPanel.querySelector('#viky-replace-btn');
         if (replaceBtn) {
-            replaceBtn.style.display = currentContext === 'writing' ? 'inline-flex' : 'none';
+            replaceBtn.style.display = 'inline-flex';
         }
 
         if (selectionRange) {
@@ -2024,7 +2053,7 @@
         });
 
         chrome.storage.local.get(['selectedModel'], (result) => {
-            const activeModel = result.selectedModel || 'google/gemma-4-26b-a4b-it:free';
+            const activeModel = result.selectedModel || 'meta-llama/llama-3.3-70b-instruct:free';
             port.postMessage({
                 action: 'ANALYZE_TEXT',
                 text: selectedText,
@@ -2066,6 +2095,33 @@
         `;
 
         setTimeout(() => feedback.remove(), 2000);
+    }
+
+    function showSelectTextNotification() {
+        const feedback = document.createElement('div');
+        feedback.className = 'viky-select-text-feedback';
+        feedback.textContent = 'Select some text on the page first';
+        document.body.appendChild(feedback);
+
+        feedback.style.cssText = [
+            'position: fixed',
+            'bottom: 24px',
+            'left: 50%',
+            'transform: translateX(-50%)',
+            'background: var(--accent-primary, #00ff9d)',
+            'color: var(--bg-surface, #121214)',
+            'padding: 10px 16px',
+            'border-radius: 8px',
+            'font-size: 12px',
+            'font-weight: 600',
+            'font-family: var(--font-family)',
+            'box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 18px var(--accent-glow, var(--accent-glow))',
+            'z-index: 2147483647',
+            'animation: fadeOut 1s ease forwards',
+            'animation-delay: 1.6s'
+        ].join(';');
+
+        setTimeout(() => feedback.remove(), 2800);
     }
 
     function showHighlightedFeedback() {
@@ -2244,41 +2300,10 @@
 
     function replaceSelection() {
         const newText = resultPanel.dataset.lastResult;
-        if (!newText || !selectionRange) return;
+        if (!newText) return;
 
-        try {
-            const container = selectionRange.commonAncestorContainer;
-            const editableEl = container.nodeType === 1 ? container : container.parentElement;
-            const isEditable = editableEl && (
-                editableEl.isContentEditable ||
-                editableEl.tagName === 'TEXTAREA' ||
-                editableEl.tagName === 'INPUT'
-            );
-
-            if (isEditable) {
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(selectionRange);
-                
-                if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
-                    document.execCommand('insertText', false, newText);
-                } else {
-                    const htmlText = textToHtml(newText);
-                    document.execCommand('insertHTML', false, htmlText);
-                }
-            } else {
-                selectionRange.deleteContents();
-                const htmlText = textToHtml(newText);
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = htmlText;
-                
-                const fragment = document.createDocumentFragment();
-                while (tempDiv.firstChild) {
-                    fragment.appendChild(tempDiv.firstChild);
-                }
-                selectionRange.insertNode(fragment);
-            }
-        } catch (err) {
+        // Helper: show "Copied!" fallback on the Replace button
+        function showCopiedFallback() {
             navigator.clipboard.writeText(newText);
             const btn = resultPanel.querySelector('#viky-replace-btn');
             btn.innerHTML = `
@@ -2296,6 +2321,100 @@
                     Replace
                 `;
             }, 2000);
+        }
+
+        // No range saved — just copy to clipboard
+        if (!selectionRange) {
+            showCopiedFallback();
+            return;
+        }
+
+        try {
+            const container = selectionRange.commonAncestorContainer;
+            const editableEl = container.nodeType === 1 ? container : container.parentElement;
+            const isEditable = editableEl && (
+                editableEl.isContentEditable ||
+                editableEl.tagName === 'TEXTAREA' ||
+                editableEl.tagName === 'INPUT'
+            );
+
+            if (isEditable) {
+                // Editable element: restore selection and use execCommand
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(selectionRange);
+                
+                if (editableEl.tagName === 'TEXTAREA' || editableEl.tagName === 'INPUT') {
+                    document.execCommand('insertText', false, newText);
+                } else {
+                    const htmlText = textToHtml(newText);
+                    document.execCommand('insertHTML', false, htmlText);
+                }
+            } else {
+                // Non-editable: try range-based replacement first
+                let replaced = false;
+                try {
+                    // Verify the range is still valid by checking its bounding rect
+                    const rect = selectionRange.getBoundingClientRect();
+                    if (rect && (rect.width > 0 || rect.height > 0)) {
+                        selectionRange.deleteContents();
+                        const htmlText = textToHtml(newText);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = htmlText;
+                        const fragment = document.createDocumentFragment();
+                        while (tempDiv.firstChild) {
+                            fragment.appendChild(tempDiv.firstChild);
+                        }
+                        selectionRange.insertNode(fragment);
+                        replaced = true;
+                    }
+                } catch (rangeErr) {
+                    // Range went stale, fall through to text-based search
+                }
+
+                // Fallback: find the original text in the DOM via TreeWalker
+                if (!replaced && selectedText) {
+                    const body = document.body;
+                    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+                    let node;
+                    let targetNode = null;
+                    let targetOffset = -1;
+
+                    while (node = walker.nextNode()) {
+                        // Skip nodes inside our own UI
+                        if (node.parentElement && node.parentElement.closest('#viky-ai-root')) continue;
+                        const idx = node.textContent.indexOf(selectedText);
+                        if (idx !== -1) {
+                            targetNode = node;
+                            targetOffset = idx;
+                            break;
+                        }
+                    }
+
+                    if (targetNode) {
+                        const range = document.createRange();
+                        range.setStart(targetNode, targetOffset);
+                        range.setEnd(targetNode, targetOffset + selectedText.length);
+                        range.deleteContents();
+                        const htmlText = textToHtml(newText);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = htmlText;
+                        const fragment = document.createDocumentFragment();
+                        while (tempDiv.firstChild) {
+                            fragment.appendChild(tempDiv.firstChild);
+                        }
+                        range.insertNode(fragment);
+                        replaced = true;
+                    }
+                }
+
+                if (!replaced) {
+                    showCopiedFallback();
+                    return;
+                }
+            }
+        } catch (err) {
+            showCopiedFallback();
             return;
         }
 

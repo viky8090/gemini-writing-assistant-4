@@ -14,6 +14,12 @@ const CACHE_MAX_SIZE = 50;
 // System instruction prepended to all text analysis prompts
 const SYSTEM_RULE = "IMPORTANT: Return ONLY the rewritten/transformed text. No explanations, no preamble, no quotes, no markdown formatting. Output the result directly. You MUST preserve the exact paragraph breaks, structure, line breaks, and spacing of the original text.";
 
+// ===== Proxy endpoints =====
+// Text + image generation route through the Cloudflare Worker for
+// sub-50ms cold starts and AI Gateway caching. Audio transcription
+// also routes through the Worker using multimodal models.
+const WORKER_PROXY_URL = 'https://viky-ai-proxy.vikranty301.workers.dev';
+
 // ===== Hash helper for cache keys =====
 function djb2Hash(str) {
     let hash = 5381;
@@ -95,7 +101,7 @@ async function handleStreamingRequest(request, port) {
         return;
     }
 
-    const FIREBASE_FUNCTION_URL = 'https://us-central1-viky-ai-backend.cloudfunctions.net/analyzeText';
+    const FIREBASE_FUNCTION_URL = `${WORKER_PROXY_URL}/analyzeText`;
 
     const token = await new Promise((resolve, reject) => {
         chrome.identity.getAuthToken({ interactive: false }, function (token) {
@@ -308,11 +314,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
 
-    if (request.action === 'TRANSCRIBE_AUDIO_PARAKEET') {
-        handleParakeetTranscription(request, sendResponse);
-        return true;
-    }
-
     if (request.action === 'OPEN_SIDEPANEL_WA_SETTINGS') {
         // Open the sidepanel on the sender's tab, then navigate to WhatsApp settings
         const tabId = sender.tab?.id;
@@ -338,7 +339,7 @@ async function handleTranslateText(request, sendResponse) {
     chrome.storage.local.get(['defaultLanguage', 'selectedModel'], async (res) => {
         try {
             const lang = res.defaultLanguage || 'Hindi';
-            const model = res.selectedModel || 'google/gemma-2-9b-it:free';
+            const model = res.selectedModel || 'meta-llama/llama-3.3-70b-instruct:free';
             const prompt = `Translate this WhatsApp message to ${lang}. Return ONLY the direct translation text. Keep the exact paragraphs, casing, and emojis if possible. Do NOT add notes, intros, explanations, or quotes:\n\n"${request.text}"`;
             
             const responseText = await callGemini(prompt, model);
@@ -354,10 +355,14 @@ async function handleTranscribeAudio(request, sendResponse) {
     chrome.storage.local.get(['selectedModel'], async (res) => {
         try {
             // We need a multimodal model to process audio files.
-            // Let's use google/gemini-2.5-flash or google/gemini-2.0-flash-exp:free which is multimodal and extremely fast!
-            let model = res.selectedModel || 'google/gemma-2-9b-it:free';
-            if (model.includes('gemma') || model.includes('llama') || model.includes('mistral') || model.includes('qwen') || model.includes('deepseek')) {
-                model = 'google/gemini-2.5-flash';
+            // Text-only models (gemma, llama, mistral, qwen, deepseek, gpt-oss,
+            // nemotron, etc.) cannot accept audio — fall back to a multimodal one.
+            const MULTIMODAL_FALLBACK = (typeof CONFIG !== 'undefined' && CONFIG.MULTIMODAL_MODEL)
+                || 'google/gemini-2.0-flash-exp:free';
+            let model = res.selectedModel || MULTIMODAL_FALLBACK;
+            const textOnly = /gemma|llama|mistral|qwen|deepseek|gpt-oss|nemotron|hermes|llama-3|laguna|trinity|minimax|glm|baidu/i;
+            if (textOnly.test(model)) {
+                model = MULTIMODAL_FALLBACK;
             }
 
             const promptPayload = [
@@ -381,62 +386,6 @@ async function handleTranscribeAudio(request, sendResponse) {
             sendResponse({ success: false, error: error.message });
         }
     });
-}
-
-async function handleParakeetTranscription(request, sendResponse) {
-    try {
-        const { audioBase64, audioFormat } = request;
-
-        if (!audioBase64) {
-            sendResponse({ success: false, error: 'No audio data provided' });
-            return;
-        }
-
-        const FIREBASE_TRANSCRIBE_URL = 'https://us-central1-viky-ai-backend.cloudfunctions.net/transcribeAudio';
-
-        const token = await new Promise((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: false }, function (token) {
-                if (chrome.runtime.lastError || !token) {
-                    reject(new Error("Please sign in from the Viky AI side panel first."));
-                } else {
-                    resolve(token);
-                }
-            });
-        });
-
-        const response = await fetch(FIREBASE_TRANSCRIBE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                audioBase64: audioBase64,
-                audioFormat: audioFormat || 'wav',
-                model: 'nvidia/parakeet-tdt-0.6b-v3'
-            })
-        });
-
-        if (!response.ok) {
-            let errorMessage = `HTTP Error: ${response.status}`;
-            try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
-            } catch (e) { }
-            throw new Error(errorMessage);
-        }
-
-        const data = await response.json();
-
-        if (data.success && data.text) {
-            sendResponse({ success: true, text: data.text });
-        } else {
-            throw new Error(data.error || 'Transcription failed');
-        }
-    } catch (error) {
-        console.error("[Viky AI] Parakeet Transcription Error:", error);
-        sendResponse({ success: false, error: error.message });
-    }
 }
 
 // ===== Text Analysis Handler =====
@@ -480,7 +429,7 @@ async function handleGenerateImage(request, sendResponse) {
             }
         }
 
-        const FIREBASE_FUNCTION_URL = 'https://us-central1-viky-ai-backend.cloudfunctions.net/analyzeText';
+        const IMAGE_GEN_URL = `${WORKER_PROXY_URL}/generateImage`;
 
         const token = await new Promise((resolve, reject) => {
             chrome.identity.getAuthToken({ interactive: false }, function (token) {
@@ -494,11 +443,11 @@ async function handleGenerateImage(request, sendResponse) {
 
         const payload = {
             prompt: enhancedPrompt,
-            model: 'x-ai/grok-imagine-image-quality',
+            model: (typeof CONFIG !== "undefined" && CONFIG.IMAGE_MODEL) || "x-ai/grok-imagine-image-quality",
             isImageGeneration: true
         };
 
-        const response = await fetch(FIREBASE_FUNCTION_URL, {
+        const response = await fetch(IMAGE_GEN_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -539,7 +488,7 @@ async function handleGenerateImage(request, sendResponse) {
 
 // ===== OpenRouter API Call (Via Firebase Proxy) =====
 async function callGemini(promptText, model) {
-    const FIREBASE_FUNCTION_URL = 'https://us-central1-viky-ai-backend.cloudfunctions.net/analyzeText';
+    const FIREBASE_FUNCTION_URL = `${WORKER_PROXY_URL}/analyzeText`;
 
     const token = await new Promise((resolve, reject) => {
         chrome.identity.getAuthToken({ interactive: false }, function (token) {

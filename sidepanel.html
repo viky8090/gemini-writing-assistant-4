@@ -47,16 +47,39 @@
         <div class="chat-container">
           <div class="chat-messages" id="chat-messages">
             <div class="welcome-block">
-              <div class="welcome-avatar">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9L12 2Z" fill="currentColor"/></svg>
+              <div class="welcome-greeting">
+                <h1>Hi<span class="welcome-comma">,</span></h1>
+                <p>How can I assist you today?</p>
               </div>
-              <h2>Hi there,</h2>
-              <p>How can I assist you today?</p>
-              <div class="welcome-pills" id="welcome-pills">
-                <button class="pill" data-prompt="Help me write a professional email">Write an email</button>
-                <button class="pill" data-prompt="Summarize the key ideas of the following text:">Summarize text</button>
-                <button class="pill" data-prompt="Improve the clarity and flow of this paragraph">Improve writing</button>
-                <button class="pill" data-prompt="Generate an engaging social media post about">Social post</button>
+              <div class="quick-actions">
+                <button class="quick-action" data-quick-tab="chat">
+                  <div class="quick-action-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </div>
+                  <span class="quick-action-label">Chat</span>
+                  <span class="quick-action-desc">Open conversation</span>
+                </button>
+                <button class="quick-action" data-quick-tab="image">
+                  <div class="quick-action-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  </div>
+                  <span class="quick-action-label">Image Studio</span>
+                  <span class="quick-action-desc">Generate visuals</span>
+                </button>
+                <button class="quick-action" data-quick-tab="tools">
+                  <div class="quick-action-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  </div>
+                  <span class="quick-action-label">Writing Tools</span>
+                  <span class="quick-action-desc">Improve any text</span>
+                </button>
+                <button class="quick-action" data-quick-tab="templates">
+                  <div class="quick-action-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+                  </div>
+                  <span class="quick-action-label">Templates</span>
+                  <span class="quick-action-desc">One-click starters</span>
+                </button>
               </div>
             </div>
           </div>
@@ -80,8 +103,18 @@
                   <span id="chat-model-pill-name">Gemma 4 26B</span>
                   <svg class="chevron-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
-                
-                <!-- Popover Menu -->
+              </div>
+
+              <!-- Decorative tool icons (Slider-style) -->
+              <button class="input-tool-btn" title="Quick selection tool">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+              </button>
+              <button class="input-tool-btn" title="Attach file">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <button class="input-tool-btn" title="Knowledge base">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </button>
                 <div id="chat-model-popover" class="chat-model-popover hidden">
                   <div class="popover-section">
                     <div class="popover-section-header">Basic (Free)</div>
@@ -199,7 +232,7 @@
                           <span class="item-desc">Advanced multi-lingual model</span>
                         </div>
                       </button>
-                      <button type="button" class="popover-item" data-model="google/gemini-2.5-flash-preview" data-name="Gemini 2.5 Flash" data-icon="♊">
+                      <button type="button" class="popover-item" data-model="google/gemini-2.5-flash" data-name="Gemini 2.5 Flash" data-icon="♊">
                         <span class="item-icon">
                           <svg viewBox="0 0 24 24" width="16" height="16" fill="url(#gemini-grad-25f)" xmlns="http://www.w3.org/2000/svg">
                             <defs>
@@ -237,7 +270,7 @@
                           <span class="item-desc">Advanced reasoning</span>
                         </div>
                       </button>
-                      <button type="button" class="popover-item" data-model="anthropic/claude-3.5-sonnet" data-name="Claude 3.5" data-icon="🎭">
+                      <button type="button" class="popover-item" data-model="anthropic/claude-sonnet-4.6" data-name="Claude 4.6" data-icon="🎭">
                         <span class="item-icon">
                           <svg viewBox="0 0 24 24" width="16" height="16" xmlns="http://www.w3.org/2000/svg">
                             <rect width="24" height="24" rx="4.8" fill="#d77655" />
@@ -245,7 +278,7 @@
                           </svg>
                         </span>
                         <div class="item-details">
-                          <span class="item-title">Claude 3.5 Sonnet</span>
+                          <span class="item-title">Claude Sonnet 4.6</span>
                           <span class="item-desc">Exceptional writing & logic</span>
                         </div>
                       </button>
@@ -265,12 +298,18 @@
                   </div>
                 </div>
               </div>
-            </div>
             <div class="input-glass">
-              <textarea id="chat-input" placeholder="Ask anything... (Shift+Enter for new line)" rows="1"></textarea>
+              <textarea id="chat-input" placeholder="Ask anything, @models, /prompts" rows="1"></textarea>
               <div class="input-actions">
                 <button id="clear-chat-btn" class="icon-btn ghost" title="Clear conversation">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+                <button id="think-toggle" class="think-toggle" title="Toggle Think mode (decorative)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21h6m-3-20v4m-7.78 2.22l2.83 2.83M1 12h4m16 0h4m-2.22 7.78l-2.83-2.83M12 6a6 6 0 0 0-6 6c0 4 6 10 6 10s6-6 6-10a6 6 0 0 0-6-6z"/></svg>
+                  Think
+                </button>
+                <button id="mic-btn" class="mic-btn" title="Voice input">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
                 <button id="send-btn" class="send-btn" title="Send">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -816,13 +855,16 @@
                 <div class="setting-item">
                   <label for="model-selector">AI Model</label>
                   <select id="model-selector">
-                    <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 Flash (Free)</option>
+                    <option value="google/gemma-4-26b-a4b-it:free">Gemma 4 26B (Free)</option>
                     <option value="google/gemma-4-31b-it:free">Gemma 4 31B (Free)</option>
+                    <option value="deepseek/deepseek-v4-flash:free">DeepSeek V4 Flash (Free)</option>
+                    <option value="meta-llama/llama-3.3-70b-instruct:free">Llama 3.3 70B (Free)</option>
+                    <option value="openrouter/free">Auto-Route Free</option>
                     <option value="google/gemma-4-31b-it">Gemma 4 31B Pro</option>
                     <option value="qwen/qwen3.7-plus">Qwen 3.7 Plus</option>
-                    <option value="google/gemini-2.5-flash-preview">Gemini 2.5 Flash</option>
+                    <option value="google/gemini-2.5-flash">Gemini 2.5 Flash</option>
                     <option value="google/gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6</option>
                     <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
                   </select>
                   <p class="hint">Select the model for text generation</p>
@@ -1171,10 +1213,41 @@
           </div>
         </div>
       </section>
+
+      <!-- Footer Bar (visible across all tabs) -->
+      <footer class="viky-footer">
+        <button class="viky-footer-credits" id="viky-credits-btn" title="Credits">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          <span id="viky-credits-count">30</span>
+        </button>
+        <button class="viky-footer-upgrade" id="viky-upgrade-btn" title="Upgrade plan">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M5 13l3-3h2l-3 3h2l3-3h2l-3 3h2l4-4-4-4h-2l3 3h-2l-3-3h-2l3 3h-2L5 13z"/></svg>
+          Upgrade 40% OFF
+        </button>
+        <div class="viky-footer-actions">
+          <button class="viky-footer-btn" id="viky-theme-btn" title="Toggle theme">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+          <button class="viky-footer-btn" id="viky-favorites-btn" title="Favorites">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </button>
+          <div class="viky-footer-avatar" id="viky-avatar" title="Account">
+            <img src="icons/logo_main_neon.png" alt="Viky" class="viky-avatar-img">
+          </div>
+        </div>
+      </footer>
     </main>
 
-    <!-- Right Sidebar Nav -->
-    <nav class="sidebar" id="sidebar">
+    <!-- Right Sidebar Nav (retractable) -->
+    <nav class="sidebar" id="sidebar" data-collapsed="true">
+      <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
       <div class="sidebar-brand">
         <div class="brand-icon">
           <img src="icons/logo_main_neon.png" alt="Viky AI" class="brand-icon-img">

@@ -13,6 +13,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
   <style>
     :root {
+      --accent-faint: rgba(0, 255, 157, 0.06);
+      --accent-medium: rgba(0, 255, 157, 0.15);
+      --accent-border: rgba(0, 255, 157, 0.4);
+
       --bg-base: #0b0f19;
       --bg-card: #111827;
       --text-primary: #f3f4f6;
@@ -92,7 +96,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
+      box-shadow: 0 0 20px var(--accent-border);
     }
 
     .logo-badge svg {
@@ -154,12 +158,12 @@
       border-radius: 30px;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
-      box-shadow: 0 4px 12px rgba(0, 255, 157, 0.25);
+      box-shadow: 0 4px 12px var(--accent-glow);
     }
 
     .action-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 18px rgba(0, 255, 157, 0.4);
+      box-shadow: 0 6px 18px var(--accent-border);
     }
 
     .action-btn:active {

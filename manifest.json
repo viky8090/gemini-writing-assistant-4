@@ -23,6 +23,7 @@
   "host_permissions": [
     "https://image.pollinations.ai/*",
     "https://us-central1-viky-ai-backend.cloudfunctions.net/*",
+    "https://viky-ai-proxy.*.workers.dev/*",
     "https://www.youtube.com/*"
   ],
   "background": {

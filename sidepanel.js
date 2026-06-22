@@ -30,6 +30,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const modelSelector = document.getElementById('model-selector');
     const saveSettingsBtn = document.getElementById('save-settings-btn');
 
+    // Retractable sidebar
+    const sidebarEl = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+
     // WhatsApp Enhancements Selectors
     const waPrivateToggle = document.getElementById('wa-private-mode-toggle');
     const waBlurNames = document.getElementById('wa-blur-names');
@@ -94,6 +98,39 @@ document.addEventListener('DOMContentLoaded', () => {
             icon.classList.add('active');
             document.getElementById(icon.dataset.tab).classList.add('active');
         });
+    });
+
+    // ===== Retractable Sidebar (hamburger toggle) =====
+    function applySidebarState(collapsed) {
+        if (!sidebarEl) return;
+        sidebarEl.dataset.collapsed = collapsed ? 'true' : 'false';
+        if (sidebarToggle) {
+            sidebarToggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+            sidebarToggle.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+        }
+    }
+
+    if (sidebarToggle && sidebarEl) {
+        sidebarToggle.addEventListener('click', () => {
+            const isCollapsed = sidebarEl.dataset.collapsed === 'true';
+            applySidebarState(!isCollapsed);
+            chrome.storage.local.set({ sidebarCollapsed: !isCollapsed });
+        });
+    }
+
+    // Restore sidebar collapsed state on load.
+    // At narrow viewports (<500px, typical Chrome sidepanel), always collapse.
+    // At wider viewports, respect the saved preference.
+    chrome.storage.local.get(['sidebarCollapsed'], (res) => {
+        const isNarrow = window.innerWidth < 500;
+        if (isNarrow) {
+            applySidebarState(true);
+        } else if (res.sidebarCollapsed === true) {
+            applySidebarState(true);
+        } else {
+            // Wide viewport and no explicit collapse pref: expand sidebar
+            applySidebarState(false);
+        }
     });
 
     // ===== Auto-resize Chat Input =====
@@ -332,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         chrome.storage.local.get(['selectedModel'], (result) => {
-            const activeModel = result.selectedModel || 'google/gemma-4-26b-a4b-it:free';
+            const activeModel = result.selectedModel || 'meta-llama/llama-3.3-70b-instruct:free';
             port.postMessage({
                 action: 'CHAT_MESSAGE',
                 message: text,
@@ -351,40 +388,84 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    clearChatBtn.addEventListener('click', () => {
-        chatHistory = [];
-        chatMessages.innerHTML = `
-            <div class="welcome-block">
-              <div class="welcome-avatar"><img class="avatar-img welcome-avatar-img" src="icons/logo_cute_neon.png" alt="AI"></div>
-              <h1>Hi there,</h1>
-              <p>How can I assist you today?</p>
-              <div class="welcome-pills">
-                <button class="pill" data-prompt="Help me write a professional email">Write an email</button>
-                <button class="pill" data-prompt="Summarize the key ideas of the following text:">Summarize text</button>
-                <button class="pill" data-prompt="Improve the clarity and flow of this paragraph">Improve writing</button>
-                <button class="pill" data-prompt="Generate an engaging social media post about">Social post</button>
+    const WELCOME_TEMPLATE = `
+        <div class="welcome-block">
+          <div class="welcome-greeting">
+            <h1>Hi<span class="welcome-comma">,</span></h1>
+            <p>How can I assist you today?</p>
+          </div>
+          <div class="quick-actions">
+            <button class="quick-action" data-quick-tab="chat">
+              <div class="quick-action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               </div>
-            </div>`;
-        bindPills();
-    });
+              <span class="quick-action-label">Chat</span>
+              <span class="quick-action-desc">Open conversation</span>
+            </button>
+            <button class="quick-action" data-quick-tab="image">
+              <div class="quick-action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </div>
+              <span class="quick-action-label">Image Studio</span>
+              <span class="quick-action-desc">Generate visuals</span>
+            </button>
+            <button class="quick-action" data-quick-tab="tools">
+              <div class="quick-action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              </div>
+              <span class="quick-action-label">Writing Tools</span>
+              <span class="quick-action-desc">Improve any text</span>
+            </button>
+            <button class="quick-action" data-quick-tab="templates">
+              <div class="quick-action-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+              </div>
+              <span class="quick-action-label">Templates</span>
+              <span class="quick-action-desc">One-click starters</span>
+            </button>
+          </div>
+        </div>`;
 
-    // ===== Welcome Pills & Templates =====
-    function bindPills() {
-        document.querySelectorAll('.pill').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const prompt = btn.dataset.prompt;
-                chatInput.value = prompt;
-                chatInput.style.height = 'auto';
-                chatInput.style.height = Math.min(chatInput.scrollHeight, 100) + 'px';
-                navIcons.forEach(i => i.classList.remove('active'));
-                panes.forEach(p => p.classList.remove('active'));
-                document.querySelector('[data-tab="chat"]').classList.add('active');
-                document.getElementById('chat').classList.add('active');
-                chatInput.focus();
+    function applyWelcomeRipple(btn, e) {
+        const rect = btn.getBoundingClientRect();
+        btn.style.setProperty('--qa-rx', ((e.clientX - rect.left) / rect.width * 100) + '%');
+        btn.style.setProperty('--qa-ry', ((e.clientY - rect.top) / rect.height * 100) + '%');
+        btn.classList.remove('is-clicked');
+        void btn.offsetWidth;
+        btn.classList.add('is-clicked');
+        setTimeout(() => btn.classList.remove('is-clicked'), 500);
+    }
+
+    function switchToTab(tabName) {
+        const navIcon = document.querySelector(`.nav-icon[data-tab="${tabName}"]`);
+        const pane = document.getElementById(tabName);
+        if (!navIcon || !pane) return;
+        navIcons.forEach(i => i.classList.remove('active'));
+        panes.forEach(p => p.classList.remove('active'));
+        navIcon.classList.add('active');
+        pane.classList.add('active');
+    }
+
+    function bindQuickActions() {
+        document.querySelectorAll('.quick-action').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tab = btn.dataset.quickTab;
+                if (!tab) return;
+                applyWelcomeRipple(btn, e);
+                switchToTab(tab);
             });
         });
     }
-    bindPills();
+
+    clearChatBtn.addEventListener('click', () => {
+        chatHistory = [];
+        chatMessages.innerHTML = WELCOME_TEMPLATE;
+        bindQuickActions();
+    });
+
+    bindQuickActions();
+
+    // Welcome pills removed in redesign; quick-actions now handled by bindQuickActions().
 
     // ===== Dynamic Templates =====
     const DEFAULT_TEMPLATES = [
@@ -569,9 +650,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ===== Tool Cards =====
     toolCards.forEach(card => {
-        card.addEventListener('click', () => {
+        card.addEventListener('click', (e) => {
             const action = card.dataset.action;
             const lang = card.dataset.lang;
+
+            // Micro-interaction: ripple from the click point.
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--ripple-x', ((e.clientX - rect.left) / rect.width * 100) + '%');
+            card.style.setProperty('--ripple-y', ((e.clientY - rect.top) / rect.height * 100) + '%');
+            card.classList.remove('is-clicked');
+            // Force reflow so re-adding the class re-triggers the transition.
+            void card.offsetWidth;
+            card.classList.add('is-clicked');
+            setTimeout(() => card.classList.remove('is-clicked'), 500);
+
             chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                 if (tabs[0]) {
                     chrome.tabs.sendMessage(tabs[0].id, {
@@ -581,9 +673,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                 }
             });
-            card.style.transform = 'scale(0.97)';
-            card.style.boxShadow = '0 0 0 2px var(--accent)';
-            setTimeout(() => { card.style.transform = ''; card.style.boxShadow = ''; }, 250);
         });
     });
 
@@ -874,7 +963,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (highlightColorCustom) highlightColorCustom.value = savedHighlightColor;
         updateColorPresetVisuals(savedHighlightColor);
 
-        const savedModel = result.selectedModel || 'google/gemma-4-26b-a4b-it:free';
+        const savedModel = result.selectedModel || 'meta-llama/llama-3.3-70b-instruct:free';
         if (modelSelector) modelSelector.value = savedModel;
         updateChatModelVisuals(savedModel);
 
@@ -950,6 +1039,61 @@ document.addEventListener('DOMContentLoaded', () => {
         applyTheme(isDark);
         chrome.storage.local.set({ theme: isDark ? 'dark' : 'light' });
     });
+
+    /* ===== Footer bar (Slider-style) ===== */
+    const vikyThemeBtn = document.getElementById('viky-theme-btn');
+    const vikyFavoritesBtn = document.getElementById('viky-favorites-btn');
+    const vikyAvatar = document.getElementById('viky-avatar');
+    const vikyUpgradeBtn = document.getElementById('viky-upgrade-btn');
+    const thinkToggle = document.getElementById('think-toggle');
+    const micBtn = document.getElementById('mic-btn');
+
+    if (vikyThemeBtn) {
+        vikyThemeBtn.addEventListener('click', () => {
+            // Toggle theme via the same logic as the settings theme switch.
+            chrome.storage.local.get(['theme'], (res) => {
+                const next = res.theme === 'light' ? 'dark' : 'light';
+                applyTheme(next === 'dark');
+                if (themeToggle) themeToggle.checked = (next === 'dark');
+                chrome.storage.local.set({ theme: next });
+            });
+        });
+    }
+    if (vikyFavoritesBtn) {
+        vikyFavoritesBtn.addEventListener('click', () => {
+            // Open the templates tab as a quick "favorites"-style entry point.
+            switchToTab('templates');
+        });
+    }
+    if (vikyAvatar) {
+        vikyAvatar.addEventListener('click', () => {
+            switchToTab('settings');
+        });
+    }
+    if (vikyUpgradeBtn) {
+        vikyUpgradeBtn.addEventListener('click', () => {
+            // Jump straight to the subscription settings subpane.
+            switchToTab('settings');
+            const subTab = document.querySelector('[data-settings-subtab="subscription"]');
+            if (subTab) subTab.click();
+        });
+    }
+    if (thinkToggle) {
+        // Decorative toggle — flips the visual state only.
+        thinkToggle.addEventListener('click', () => {
+            thinkToggle.classList.toggle('active');
+        });
+    }
+    if (micBtn) {
+        micBtn.addEventListener('click', () => {
+            // Hook the mic button to the existing recording flow on the transcribe tab.
+            switchToTab('transcribe');
+            setTimeout(() => {
+                const recordBtn = document.getElementById('transcribe-record-btn');
+                if (recordBtn) recordBtn.click();
+            }, 350);
+        });
+    }
 
     if (showFloatingToggle) {
         showFloatingToggle.addEventListener('change', (e) => {
@@ -1293,7 +1437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ===== Subscription Management =====
-    const FIREBASE_BASE = 'https://us-central1-viky-ai-backend.cloudfunctions.net';
+    const FIREBASE_BASE = 'https://viky-ai-proxy.vikranty301.workers.dev';
     let currentBilling = 'monthly';
 
     // Billing toggle
@@ -1688,7 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const response = await chrome.runtime.sendMessage({
-                    action: 'TRANSCRIBE_AUDIO_PARAKEET',
+                    action: 'TRANSCRIBE_AUDIO',
                     audioBase64: transcribeCurrentAudioBase64,
                     audioFormat: transcribeCurrentAudioFormat || 'wav'
                 });

@@ -1,1 +1,9 @@
-/* Styles moved to content.js (Shadow DOM embedded) */
+/* Viky AI — Content Script Styles
+ *
+ * Intentionally empty.
+ *
+ * All content-script styles are inlined inside content.js as a Shadow DOM
+ * stylesheet, so the host page's CSS cannot bleed in and our styles cannot
+ * bleed out. If you need to tweak the floating button, bubble menu, or
+ * result panel, search for `VIKY_CSS` near the top of content.js.
+ */

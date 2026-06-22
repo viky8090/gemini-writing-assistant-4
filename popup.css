@@ -2,13 +2,17 @@
 /* aria-label placeholder */
 
 :root {
+  --accent-faint: rgba(0, 255, 157, 0.06);
+  --accent-medium: rgba(0, 255, 157, 0.15);
+  --accent-border: rgba(0, 255, 157, 0.4);
+
   --bg-deep: #050507;
   --bg-card: rgba(255, 255, 255, 0.03);
   --border: rgba(255, 255, 255, 0.06);
   --text-1: #ffffff;
   --text-2: #a1a1aa;
   --accent: #00ff9d;
-  --accent-soft: rgba(0, 255, 157, 0.15);
+  --accent-soft: rgba(0, 255, 157, 0.12);
   --accent-glow: rgba(0, 255, 157, 0.35);
   --radius-xl: 18px;
   --radius-lg: 12px;
@@ -94,13 +98,13 @@ body {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(0,255,157,0.15), rgba(0,212,170,0.08));
-  border: 1px solid rgba(0,255,157,0.25);
+  background: linear-gradient(135deg, var(--accent-medium), rgba(0,212,170,0.08));
+  border: 1px solid var(--accent-glow);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--accent);
-  box-shadow: 0 0 16px rgba(0,255,157,0.15);
+  box-shadow: 0 0 16px var(--accent-medium);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .logo-ring:hover {
@@ -187,7 +191,7 @@ body {
 .btn-primary {
   background: linear-gradient(135deg, #00ff9d, #00d4aa);
   color: #000;
-  box-shadow: 0 4px 20px rgba(0,255,157,0.25);
+  box-shadow: 0 4px 20px var(--accent-glow);
 }
 .btn-primary:hover {
   transform: translateY(-1px);
