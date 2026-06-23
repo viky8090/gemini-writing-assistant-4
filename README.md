@@ -1,6 +1,6 @@
 # 🟢 Viky AI - Smart Writing Assistant
 
-> **Viky AI** is a premium, feature-rich Google Chrome extension designed to be your ultimate browser companion. It integrates state-of-the-art AI language models, an Image Studio, real-time audio transcription, smart inline highlighting, and page-wide text replacement to enhance your productivity across the web.
+> **Viky AI** is a premium, feature-rich Google Chrome extension designed to be your ultimate browser companion. It integrates state-of-the-art AI language models, an Image Studio, real-time audio transcription, and smart inline highlighting to enhance your productivity across the web.
 
 ---
 
@@ -16,22 +16,18 @@ Double-click or highlight text on **any webpage** to summon the Viky AI Quick Me
 *   **Smart Refinement**: Instantly grammar-check, rewrite, or continue writing.
 *   **Highlight & Color Code**: Highlight page text with customizable, translucent highlights.
 *   **Dynamic Translation**: Translate text between English, Hindi, Spanish, French, German, Italian, Chinese, Japanese, and more.
-*   **Interactive Result Panel**: View AI outputs in a beautiful draggable modal, copy with one click, or replace.
+*   **Interactive Result Panel**: View AI outputs in a beautiful draggable modal, copy with one click, or instantly replace your selected text.
+    *   *Smart Replace*: In-place replacement works seamlessly in text areas, input fields, and rich-text editors, with a fallback DOM-text search to replace text on read-only pages.
 
-### 3. 🔄 Robust Page-Wide "Replace"
-*   **Editable Inputs**: Instantly swap selected text inside textareas, input fields, and rich-text editors.
-*   **DOM Injection**: Replace selected static text on read-only webpages in real-time.
-*   **TreeWalker Fallback**: Features a smart, tree-walking text finder that locate selections and replaces them even if browser ranges go stale.
-
-### 4. 🎨 Image Studio
+### 3. 🎨 Image Studio
 *   Generate high-quality visuals on-the-fly using the integrated Pollinations AI engine.
 *   Quickly download, preview, or insert generated graphics.
 
-### 5. 🎤 Audio Transcriber
+### 4. 🎤 Audio Transcriber
 *   Use your microphone for direct audio capture.
 *   Convert speech to text instantly with AI-powered transcription.
 
-### 6. 📱 WhatsApp Web Integration
+### 5. 📱 WhatsApp Web Integration
 *   Specialized content scripts to restore deleted messages.
 *   Inline assistant utilities specifically tuned for messaging.
 
