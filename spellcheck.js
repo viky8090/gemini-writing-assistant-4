@@ -350,6 +350,14 @@
                     Fix All (${errorCount} errors)
                 </button>
             </div>` : ''}
+            <div class="suggestion-ai-analyze" style="padding: 6px 14px 10px; border-top: 1px solid var(--border-color); margin-top: 4px;">
+                <button class="suggestion-btn ai-proofread" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(0, 255, 157, 0.08); border: 1px solid rgba(0, 255, 157, 0.2); color: var(--accent-primary, #00ff9d);">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                    </svg>
+                    AI Proofread (Fast & Free)
+                </button>
+            </div>
         `;
 
         let top = rect.top + rect.height + 8 + scrollY;
@@ -398,6 +406,78 @@
                 popupVisible = false;
                 suggestionPopup.classList.add('hidden');
                 applyAllCorrections(el);
+            });
+        }
+
+        // AI Proofread
+        const aiProofreadBtn = suggestionPopup.querySelector('.suggestion-btn.ai-proofread');
+        if (aiProofreadBtn) {
+            aiProofreadBtn.addEventListener('mousedown', (e) => {
+                e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
+                
+                const textToProofread = getElementText(el);
+                if (!textToProofread || textToProofread.length < MIN_TEXT_LENGTH) return;
+                
+                const originalHtml = aiProofreadBtn.innerHTML;
+                aiProofreadBtn.innerHTML = `
+                    <div style="width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;"></div>
+                    Analyzing...
+                `;
+                aiProofreadBtn.disabled = true;
+                
+                chrome.runtime.sendMessage({
+                    action: 'ANALYZE_TEXT',
+                    text: textToProofread,
+                    type: 'FIX_GRAMMAR',
+                    model: 'meta-llama/llama-3.2-3b-instruct:free'
+                }, (response) => {
+                    aiProofreadBtn.innerHTML = originalHtml;
+                    aiProofreadBtn.disabled = false;
+                    
+                    if (response && response.success && response.data) {
+                        const cleaned = response.data.trim();
+                        // If output is wrapped in quotes, clean them up
+                        let finalResult = cleaned;
+                        if (finalResult.startsWith('"') && finalResult.endsWith('"')) {
+                            finalResult = finalResult.substring(1, finalResult.length - 1);
+                        }
+                        
+                        // Apply replacement
+                        isApplyingCorrection = true;
+                        el.focus();
+                        
+                        if (el.tagName.toUpperCase() === 'TEXTAREA' || el.tagName.toUpperCase() === 'INPUT') {
+                            el.select();
+                            try {
+                                document.execCommand('insertText', false, finalResult);
+                            } catch (err) {
+                                el.value = finalResult;
+                            }
+                        } else if (el.isContentEditable) {
+                            const range = document.createRange();
+                            range.selectNodeContents(el);
+                            const sel = window.getSelection();
+                            sel.removeAllRanges();
+                            sel.addRange(range);
+                            try {
+                                document.execCommand('insertText', false, finalResult);
+                            } catch (err) {
+                                el.textContent = finalResult;
+                            }
+                        }
+                        
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        
+                        currentErrors = [];
+                        textCache.clear();
+                        clearOverlays();
+                        isApplyingCorrection = false;
+                        hideSuggestionPopup();
+                    } else {
+                        console.warn('[Viky AI] AI Proofread failed:', response ? response.error : 'No response');
+                    }
+                });
             });
         }
     }
