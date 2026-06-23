@@ -339,7 +339,6 @@
             </div>
             <div class="suggestion-actions">
                 <button class="suggestion-btn dismiss">Dismiss</button>
-                ${suggestions.length > 0 ? `<button class="suggestion-btn accept" data-suggestion="${escapeHtml(suggestions[0])}">Accept</button>` : ''}
             </div>
             ${errorCount > 1 ? `
             <div class="suggestion-fix-all">
@@ -379,17 +378,17 @@
             hideSuggestionPopup();
         });
 
-        // Accept (using the first suggestion)
-        const acceptBtn = suggestionPopup.querySelector('.suggestion-btn.accept');
-        if (acceptBtn) {
-            acceptBtn.addEventListener('mousedown', (e) => {
+        // Select correction on clicking the suggestion chip
+        suggestionPopup.querySelectorAll('.suggestion-corrected').forEach(item => {
+            item.addEventListener('mousedown', (e) => {
                 e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
-                const sug = acceptBtn.dataset.suggestion || suggestions[0] || error.suggestion;
+                const sug = item.dataset.suggestion;
+                if (!sug) return; // Ignore if no suggestion exists
                 popupVisible = false;
                 suggestionPopup.classList.add('hidden');
                 applySingleCorrection(el, { ...error, suggestion: sug });
             });
-        }
+        });
 
         // Fix All
         const fixAllBtn = suggestionPopup.querySelector('.suggestion-btn.fix-all');
@@ -553,35 +552,41 @@
             el.dispatchEvent(new Event('change', { bubbles: true }));
 
         } else if (el.isContentEditable) {
+            // Replace text nodes directly without changing selection or focusing in a loop
             for (const err of unique) {
                 const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
                 let offset = 0, startNode, startOff, endNode, endOff;
                 while (walker.nextNode()) {
                     const node = walker.currentNode;
                     const len = node.textContent.length;
-                    if (!startNode && offset + len > err.start) { startNode = node; startOff = err.start - offset; }
-                    if (!endNode && offset + len >= err.end) { endNode = node; endOff = err.end - offset; break; }
+                    if (!startNode && offset + len > err.start) {
+                        startNode = node;
+                        startOff = err.start - offset;
+                    }
+                    if (!endNode && offset + len >= err.end) {
+                        endNode = node;
+                        endOff = err.end - offset;
+                        break;
+                    }
                     offset += len;
                 }
                 if (startNode && endNode) {
-                    const range = document.createRange();
-                    range.setStart(startNode, startOff);
-                    range.setEnd(endNode, endOff);
-                    const sel = window.getSelection();
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    el.focus();
-
-                    const success = document.execCommand('insertText', false, err.suggestion);
-
-                    if (!success || getElementText(el).includes(err.word)) {
-                        if (startNode === endNode) {
-                            const tc = startNode.textContent;
-                            startNode.textContent = tc.substring(0, startOff) + err.suggestion + tc.substring(endOff);
-                        }
+                    if (startNode === endNode) {
+                        const tc = startNode.textContent;
+                        startNode.textContent = tc.substring(0, startOff) + err.suggestion + tc.substring(endOff);
+                    } else {
+                        // Spans across multiple nodes: clean up the range
+                        const range = document.createRange();
+                        range.setStart(startNode, startOff);
+                        range.setEnd(endNode, endOff);
+                        range.deleteContents();
+                        range.insertNode(document.createTextNode(err.suggestion));
                     }
                 }
             }
+            // Dispatch input and change events to let the rich-text framework know
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         currentErrors = [];
@@ -592,6 +597,31 @@
         setTimeout(() => {
             if (activeElement === el) triggerSpellCheck(el);
         }, 600);
+    }
+
+    function isProperNounOrAcronym(word, start, fullText) {
+        // 1. All uppercase (acronyms, capitalized names like VIKRANT, AMITY): skip
+        if (word === word.toUpperCase()) return true;
+
+        // 2. Mixed/Capitalized (proper nouns/names): skip if not start of a sentence
+        if (word[0] === word[0].toUpperCase()) {
+            let i = start - 1;
+            while (i >= 0 && /\s/.test(fullText[i])) {
+                i--;
+            }
+            // If it starts the text, we don't automatically skip it (it could be start of sentence)
+            if (i < 0) return false;
+
+            // If preceded by sentence end, it's starting a sentence, so we check it
+            const char = fullText[i];
+            if (char === '.' || char === '!' || char === '?') {
+                return false;
+            }
+
+            // Preceded by anything else (space after comma, letter, quote, parentheses, etc.) -> proper noun, skip it!
+            return true;
+        }
+        return false;
     }
 
     // ===== Local Spell Check (No API) =====
@@ -620,6 +650,10 @@
             for (const token of tokens) {
                 // Skip single-letter words and common contractions
                 if (token.word.length <= 1) continue;
+
+                // Skip proper nouns, acronyms, and capitalized names (like VIKRANT)
+                if (isProperNounOrAcronym(token.word, token.start, text)) continue;
+
                 if (!typo.check(token.word)) {
                     const suggestions = typo.suggest(token.word, 1);
                     errors.push({
