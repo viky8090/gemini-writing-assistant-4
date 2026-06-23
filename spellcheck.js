@@ -466,15 +466,39 @@
                                 el.value = finalResult;
                             }
                         } else if (el.isContentEditable) {
+                            // Capture the original styling to prevent formatting loss
+                            const styleSource = el.firstElementChild || el;
+                            const computed = window.getComputedStyle(styleSource);
+                            const color = computed.color;
+                            const fontFamily = computed.fontFamily;
+                            const fontSize = computed.fontSize;
+                            const fontWeight = computed.fontWeight;
+                            const fontStyle = computed.fontStyle;
+                            const lineHeight = computed.lineHeight;
+                            const textDecoration = computed.textDecoration;
+
                             const range = document.createRange();
                             range.selectNodeContents(el);
                             const sel = window.getSelection();
                             sel.removeAllRanges();
                             sel.addRange(range);
+
+                            const htmlText = finalResult.split(/\r?\n/).map(line => escapeHtml(line)).join('<br>');
+                            const styledHtml = `<span style="color: ${color}; font-family: ${fontFamily}; font-size: ${fontSize}; font-weight: ${fontWeight}; font-style: ${fontStyle}; line-height: ${lineHeight}; text-decoration: ${textDecoration}; white-space: pre-wrap;">${htmlText}</span>`;
+
+                            let success = false;
                             try {
-                                document.execCommand('insertText', false, finalResult);
-                            } catch (err) {
-                                el.textContent = finalResult;
+                                success = document.execCommand('insertHTML', false, styledHtml);
+                            } catch (err) {}
+
+                            if (!success) {
+                                try {
+                                    success = document.execCommand('insertText', false, finalResult);
+                                } catch (err) {}
+                            }
+
+                            if (!success) {
+                                el.innerHTML = styledHtml;
                             }
                         }
                         
