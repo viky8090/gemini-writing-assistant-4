@@ -96,12 +96,12 @@ window.addEventListener("message", (event) => {
 
     // Route transcription or translation requests to extension services
     chrome.runtime.sendMessage(payload, (response) => {
-        // Send the response back to the MAIN context
+        // Send the response back to the MAIN context (same-origin — no need for '*')
         window.postMessage({
             sender: 'viky-wa-content',
             action: action + '_RESPONSE',
             requestId: requestId,
             response: response
-        }, '*');
+        }, location.origin);
     });
 });

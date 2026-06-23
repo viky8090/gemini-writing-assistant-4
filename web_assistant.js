@@ -77,6 +77,26 @@
     }
   }
 
+  // ===== Utility: render the "Extension updated — please refresh" message =====
+  // Uses a real <button> with addEventListener instead of inline `onclick` because
+  // MV3 default CSP strips inline event handlers — the old `onclick="window.location.reload()"`
+  // was a dead link on every site with a strict CSP.
+  function renderContextInvalidatedError(container) {
+    container.innerHTML = '';
+    const p = document.createElement('p');
+    p.style.color = '#ff6b6b';
+    p.style.margin = '0';
+    p.appendChild(document.createTextNode('⚠ Extension was updated. Please '));
+    const refreshBtn = document.createElement('button');
+    refreshBtn.type = 'button';
+    refreshBtn.textContent = 'refresh this page';
+    refreshBtn.style.cssText = 'color:#00ff9d;text-decoration:underline;cursor:pointer;background:none;border:none;padding:0;font:inherit;display:inline;';
+    refreshBtn.addEventListener('click', () => window.location.reload());
+    p.appendChild(refreshBtn);
+    p.appendChild(document.createTextNode(' and try again.'));
+    container.appendChild(p);
+  }
+
   // ===== Utility: stream AI response =====
   function streamAI(prompt, onChunk, onDone, onError) {
     // Guard: check for invalidated extension context before connecting
@@ -362,7 +382,7 @@ IMPORTANT: Base your entire answer ONLY on the information found in the search r
       // done
     }, (err) => {
       if (err === 'CONTEXT_INVALIDATED') {
-        body.innerHTML = `<p style="color:#ff6b6b;">⚠ Extension was updated. Please <a href="javascript:void(0)" onclick="window.location.reload()" style="color:#00ff9d;text-decoration:underline;cursor:pointer;">refresh this page</a> and try again.</p>`;
+        renderContextInvalidatedError(body);
       } else {
         body.innerHTML = `<p style="color:#ff6b6b;">Error: ${err}</p>`;
       }
@@ -953,7 +973,7 @@ Description: "${desc}"
         // Done
       }, (err) => {
         if (err === 'CONTEXT_INVALIDATED') {
-          body.innerHTML = `<p style="color:#ff6b6b;">⚠ Extension was updated. Please <a href="javascript:void(0)" onclick="window.location.reload()" style="color:#00ff9d;text-decoration:underline;cursor:pointer;">refresh this page</a> and try again.</p>`;
+          renderContextInvalidatedError(body);
         } else {
           body.innerHTML = `<p style="color:#ff6b6b;">Error generating analysis: ${err}</p>`;
         }
@@ -1136,7 +1156,7 @@ Description: "${desc}"
         body.innerHTML = mdToHtml(full);
       }, () => {}, (err) => {
         if (err === 'CONTEXT_INVALIDATED') {
-          body.innerHTML = `<p style="color:#ff6b6b;">⚠ Extension was updated. Please <a href="javascript:void(0)" onclick="window.location.reload()" style="color:#00ff9d;text-decoration:underline;cursor:pointer;">refresh this page</a> and try again.</p>`;
+          renderContextInvalidatedError(body);
         } else {
           body.innerHTML = `<p style="color:#ff6b6b;">Could not preview this link.</p>`;
         }
@@ -1311,7 +1331,7 @@ Last email received:
         // Done - user can edit before sending
       }, (err) => {
         if (err === 'CONTEXT_INVALIDATED') {
-          composeArea.innerHTML = `<span style="color:#ff6b6b;">⚠ Extension was updated. Please <a href="javascript:void(0)" onclick="window.location.reload()" style="color:#00ff9d;text-decoration:underline;cursor:pointer;">refresh this page</a> and try again.</span>`;
+          renderContextInvalidatedError(composeArea);
         } else {
           composeArea.innerHTML = `<span style="color:#ff6b6b;">Error generating reply: ${err}</span>`;
         }

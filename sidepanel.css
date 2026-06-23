@@ -81,8 +81,10 @@ body {
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-glow); }
-  50% { box-shadow: 0 0 0 6px transparent; }
+  /* Original: animated box-shadow (no compositor fast-path, repaints every frame).
+     New: animate opacity + transform scale instead — both are GPU-composited. */
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%      { opacity: 1;   transform: scale(1.0); }
 }
 
 @keyframes slideInRight {
@@ -96,8 +98,11 @@ body {
 }
 
 @keyframes paneEnter {
-  from { opacity: 0; transform: translateY(8px); filter: blur(2px); }
-  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+  /* Original: animated `filter: blur(2px)` which has no compositor fast-path and
+     repaints the entire pane every frame. Removed the blur — opacity + transform
+     alone produce a clean enter animation that's fully GPU-composited. */
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes springIn {
@@ -107,8 +112,9 @@ body {
 }
 
 @keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
+  /* GPU-composited: translateX is handled by the compositor thread, no repaint. */
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes rippleOut {
@@ -157,31 +163,32 @@ body {
   animation: breathe 6s ease-in-out infinite;
 }
 
-/* Two drifting glow blobs behind the welcome screen */
+/* Two drifting glow blobs behind the welcome screen.
+   Original used `filter: blur(80px)` on solid-color circles, which has no compositor
+   fast-path and repainted a large region every frame. Replaced with pre-baked
+   radial-gradients — visually equivalent, ~100x cheaper to paint. */
 .welcome-screen::before,
 .welcome-screen::after {
   content: '';
   position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.35;
   pointer-events: none;
   z-index: 0;
+  opacity: 0.6;
 }
 .welcome-screen::before {
-  width: 280px;
-  height: 280px;
-  background: var(--accent-soft);
-  top: -60px;
-  right: -80px;
+  width: 360px;
+  height: 360px;
+  top: -100px;
+  right: -120px;
+  background: radial-gradient(circle, var(--accent-soft) 0%, transparent 70%);
   animation: floatY 8s ease-in-out infinite;
 }
 .welcome-screen::after {
-  width: 220px;
-  height: 220px;
-  background: var(--accent-faint);
-  bottom: -40px;
-  left: -60px;
+  width: 300px;
+  height: 300px;
+  bottom: -80px;
+  left: -90px;
+  background: radial-gradient(circle, var(--accent-faint) 0%, transparent 70%);
   animation: floatY 7s ease-in-out infinite reverse;
 }
 
@@ -269,7 +276,7 @@ body {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .login-btn:hover {
@@ -385,7 +392,7 @@ body {
   background: var(--bg-secondary);
   color: var(--text-2);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   flex-shrink: 0;
 }
 .sidebar-toggle:hover {
@@ -512,7 +519,7 @@ body {
   padding: 0 10px;
   gap: 8px;
   border-radius: var(--radius-sm);
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   position: relative;
 }
 
@@ -680,7 +687,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 .quick-action:hover .quick-action-icon {
   background: var(--accent-medium);
@@ -790,7 +797,7 @@ body {
   font-size: 10px;
   font-weight: 500;
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
 }
 
 .msg-action-btn:hover {
@@ -841,7 +848,7 @@ body {
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
 }
 
 .code-copy-btn:hover {
@@ -896,7 +903,7 @@ body {
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   flex-shrink: 0;
 }
 .input-tool-btn:hover {
@@ -960,7 +967,7 @@ body {
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 .think-toggle:hover { color: var(--text-1); background: var(--bg-hover); }
 .think-toggle.active {
@@ -989,7 +996,7 @@ body {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 .mic-btn:hover {
   color: var(--accent);
@@ -1009,7 +1016,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -1033,7 +1040,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
 }
 
 .icon-btn.ghost:hover {
@@ -1102,7 +1109,7 @@ body {
   font-size: 12px;
   font-family: var(--font);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .action-btn:hover {
@@ -1160,7 +1167,7 @@ body {
   font-size: 11px;
   font-family: var(--font);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .style-btn:hover {
@@ -1188,7 +1195,7 @@ body {
   font-weight: 600;
   font-family: var(--font);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -1215,7 +1222,7 @@ body {
   border: 1px solid var(--border);
   object-fit: cover;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -1252,7 +1259,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   color: var(--text-2);
   font-family: var(--font);
   text-align: left;
@@ -1318,7 +1325,7 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   color: var(--text-2);
   font-family: var(--font);
   text-align: left;
@@ -1423,7 +1430,7 @@ body {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   text-align: left;
   border-radius: 0;
   width: 100%;
@@ -1514,7 +1521,7 @@ option {
   background: rgba(255,255,255,0.06);
   border-radius: var(--radius-full);
   position: relative;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   border: 1px solid var(--border);
 }
 
@@ -1610,19 +1617,29 @@ option {
   border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 4px;
 }
 
-/* Skeleton shimmer (for placeholders like image generation) */
+/* Skeleton shimmer (for placeholders like image generation).
+   Original animated `background-position` which has no compositor fast-path and
+   repaints the element 60 times/second. Replaced with a `::before` overlay that
+   uses `transform: translateX()` — compositor-friendly, zero paint cost per frame. */
 .viky-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+.viky-skeleton::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   background: linear-gradient(
     90deg,
-    var(--bg-elevated) 0%,
-    var(--bg-hover) 40%,
+    transparent 0%,
     var(--accent-soft) 50%,
-    var(--bg-hover) 60%,
-    var(--bg-elevated) 100%
+    transparent 100%
   );
-  background-size: 200% 100%;
+  transform: translateX(-100%);
   animation: shimmer 1.6s ease-in-out infinite;
-  border-radius: var(--radius-sm);
+  pointer-events: none;
 }
 
 @media (max-width: 360px) {
@@ -1661,7 +1678,7 @@ option {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   flex-shrink: 0;
 }
 .viky-footer-credits:hover {
@@ -1684,7 +1701,7 @@ option {
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -1714,7 +1731,7 @@ option {
   border-radius: var(--radius-sm);
   color: var(--text-3);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 .viky-footer-btn:hover {
   color: var(--text-1);
@@ -1732,7 +1749,7 @@ option {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1775,7 +1792,7 @@ option {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   font-family: inherit;
   outline: none;
 }
@@ -1863,7 +1880,7 @@ option {
   text-align: left;
   cursor: pointer;
   color: var(--text-2);
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   font-family: inherit;
   width: 100%;
 }
@@ -1982,7 +1999,7 @@ option {
   border-radius: var(--radius-sm);
   background: rgba(255,255,255,0.03);
   position: relative;
-  transition: all 0.2s;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s;
   flex-shrink: 0;
 }
 
@@ -2092,7 +2109,7 @@ option {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   text-align: left;
   border-radius: 0;
   white-space: nowrap;
@@ -2358,7 +2375,7 @@ option {
   align-items: center;
   justify-content: center;
   border-radius: 2px;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .template-action-btn:hover {
@@ -2768,7 +2785,7 @@ option {
   border: 2px solid var(--border);
   border-radius: 50%;
   position: relative;
-  transition: all 0.2s;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s;
   flex-shrink: 0;
   background: transparent;
 }
@@ -2870,7 +2887,7 @@ option {
   font-family: var(--font);
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2907,7 +2924,7 @@ option {
   border-radius: var(--radius-md);
   padding: 14px;
   position: relative;
-  transition: all 0.25s;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.25s;
 }
 
 .sub-plan-card:hover {
@@ -3017,7 +3034,7 @@ option {
   font-family: var(--font);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s;
 }
 
 .sub-plan-btn:hover {
@@ -3121,7 +3138,7 @@ option {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   position: relative;
   flex-shrink: 0;
 }
@@ -3213,7 +3230,7 @@ option {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .transcribe-upload-zone:hover {
@@ -3333,7 +3350,7 @@ option {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -3362,7 +3379,7 @@ option {
   font-weight: 600;
   font-family: var(--font);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.15s ease;
   flex-shrink: 0;
 }
 
@@ -3450,7 +3467,7 @@ option {
   font-size: 12px;
   font-family: var(--font);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
 }
 
 .transcript-action-btn:hover {
@@ -3499,7 +3516,7 @@ option {
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all var(--transition);
+  transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition);
   min-width: 0;
 }
 
@@ -3593,4 +3610,16 @@ option {
 
 :root.theme-light .transcript-output {
   background: rgba(0, 0, 0, 0.02);
+}
+
+/* ===== Reduced motion: honor OS-level accessibility setting =====
+   Prevents vestibular discomfort for users who set "Reduce motion" in their OS.
+   Also reduces battery drain since infinite-breathe / shimmer / pulse animations are paused. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
 }

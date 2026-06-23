@@ -90,6 +90,137 @@ document.addEventListener('DOMContentLoaded', () => {
     let blacklistDomains = [];
     let editingTemplateIndex = -1;
 
+    // ===== Persistence helpers =====
+    // Chat history, generated images, and transcriptions are persisted to chrome.storage.local
+    // so they survive side-panel close/reopen (which destroys the JS context).
+    // We cap each list to avoid blowing the 10MB QUOTA_BYTES limit.
+    const CHAT_HISTORY_MAX = 200;
+    const IMAGE_HISTORY_MAX = 10;
+    const TRANSCRIBE_HISTORY_MAX = 20;
+    let pendingChatSave = null;
+
+    // ===== Storage schema versioning + migrations =====
+    // Bump SCHEMA_VERSION when the shape of any persisted key changes. Add a migration
+    // function below that upgrades old data to the new shape. Migrations run once on
+    // side panel load and on extension install/update (via background.js onInstalled).
+    const SCHEMA_VERSION = 1;
+    const migrations = [
+        // Example for future use:
+        // {
+        //   version: 2,
+        //   description: 'Convert chatHistory items from {role,content} to {role,content,timestamp}',
+        //   run: async () => {
+        //     const { chatHistory } = await chrome.storage.local.get(['chatHistory']);
+        //     if (!Array.isArray(chatHistory)) return;
+        //     const migrated = chatHistory.map(m => m.timestamp ? m : { ...m, timestamp: Date.now() });
+        //     await chrome.storage.local.set({ chatHistory: migrated });
+        //   }
+        // }
+    ];
+
+    async function runMigrations() {
+        try {
+            const { schemaVersion } = await chrome.storage.local.get(['schemaVersion']);
+            const current = schemaVersion || 0;
+            if (current >= SCHEMA_VERSION) return;
+            console.log(`[Viky AI] Running storage migrations: v${current} → v${SCHEMA_VERSION}`);
+            for (const m of migrations) {
+                if (m.version > current && m.version <= SCHEMA_VERSION) {
+                    console.log(`[Viky AI] Migration v${m.version}: ${m.description}`);
+                    try {
+                        await m.run();
+                    } catch (err) {
+                        console.error(`[Viky AI] Migration v${m.version} failed:`, err);
+                    }
+                }
+            }
+            await chrome.storage.local.set({ schemaVersion: SCHEMA_VERSION });
+            console.log(`[Viky AI] Storage migrations complete — now at v${SCHEMA_VERSION}`);
+        } catch (e) {
+            console.warn('[Viky AI] Migration runner error:', e);
+        }
+    }
+
+    function persistChatHistory() {
+        // Debounce: collapse rapid pushes (e.g. streaming completion + meta update) into one write.
+        if (pendingChatSave) clearTimeout(pendingChatSave);
+        pendingChatSave = setTimeout(() => {
+            const trimmed = chatHistory.slice(-CHAT_HISTORY_MAX);
+            try {
+                chrome.storage.local.set({ chatHistory: trimmed }, () => {
+                    if (chrome.runtime.lastError) {
+                        console.warn('[Viky AI] chatHistory save failed:', chrome.runtime.lastError.message);
+                    }
+                });
+            } catch (e) { console.warn('[Viky AI] chatHistory save error:', e); }
+        }, 300);
+    }
+
+    function persistImageHistory() {
+        const trimmed = generatedImages.slice(-IMAGE_HISTORY_MAX);
+        try {
+            chrome.storage.local.set({ generatedImages: trimmed }, () => {
+                if (chrome.runtime.lastError) console.warn('[Viky AI] generatedImages save failed:', chrome.runtime.lastError.message);
+            });
+        } catch (e) { console.warn('[Viky AI] generatedImages save error:', e); }
+    }
+
+    function persistTranscribeHistory() {
+        const trimmed = transcribeSessionHistory.slice(0, TRANSCRIBE_HISTORY_MAX);
+        try {
+            chrome.storage.local.set({ transcribeSessionHistory: trimmed }, () => {
+                if (chrome.runtime.lastError) console.warn('[Viky AI] transcribeSessionHistory save failed:', chrome.runtime.lastError.message);
+            });
+        } catch (e) { console.warn('[Viky AI] transcribeSessionHistory save error:', e); }
+    }
+
+    function loadPersistedState() {
+        return new Promise((resolve) => {
+            chrome.storage.local.get(['chatHistory', 'generatedImages', 'transcribeSessionHistory'], (result) => {
+                if (Array.isArray(result.chatHistory) && result.chatHistory.length > 0) {
+                    chatHistory = result.chatHistory;
+                    // Re-render each persisted message into the DOM (without re-pushing to chatHistory).
+                    chatHistory.forEach(item => {
+                        const welcome = chatMessages.querySelector('.welcome-block');
+                        if (welcome) welcome.remove();
+                        const msgDiv = document.createElement('div');
+                        msgDiv.className = `message ${item.role}`;
+                        const avatarSvg = item.role === 'user'
+                            ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`
+                            : `<img class="avatar-img" src="icons/logo_cute_neon.png" alt="AI">`;
+                        const content = item.role === 'user' ? escapeHtml(item.content) : formatMessage(item.content);
+                        msgDiv.innerHTML = `
+                            <div class="message-avatar">${avatarSvg}</div>
+                            <div class="message-content">${content}</div>
+                        `;
+                        if (item.role === 'ai') {
+                            const meta = document.createElement('div');
+                            meta.className = 'message-meta';
+                            meta.innerHTML = `
+                                <div class="msg-actions">
+                                    <button class="msg-action-btn copy-msg" title="Copy response">Copy</button>
+                                    <button class="msg-action-btn regen-msg" title="Regenerate">Regenerate</button>
+                                </div>
+                            `;
+                            msgDiv.querySelector('.message-content').appendChild(meta);
+                        }
+                        chatMessages.appendChild(msgDiv);
+                    });
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                if (Array.isArray(result.generatedImages) && result.generatedImages.length > 0) {
+                    generatedImages = result.generatedImages;
+                    renderImageHistory();
+                }
+                if (Array.isArray(result.transcribeSessionHistory) && result.transcribeSessionHistory.length > 0) {
+                    transcribeSessionHistory = result.transcribeSessionHistory;
+                    renderTranscribeHistory();
+                }
+                resolve();
+            });
+        });
+    }
+
     // ===== Tab Navigation =====
     navIcons.forEach(icon => {
         icon.addEventListener('click', () => {
@@ -174,7 +305,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         chatMessages.appendChild(msgDiv);
         chatMessages.scrollTop = chatMessages.scrollHeight;
-        if (type !== 'loading') chatHistory.push({ role: type, content: text });
+        if (type !== 'loading') {
+            chatHistory.push({ role: type, content: text });
+            persistChatHistory();
+        }
         return msgDiv;
     }
 
@@ -306,6 +440,63 @@ document.addEventListener('DOMContentLoaded', () => {
         let streamingDiv = null;
         let fullText = '';
         let hasStarted = false;
+        let streamFinalized = false;
+
+        // rAF-coalesced rendering: instead of calling formatMessage on every chunk (which
+        // causes ~2000 innerHTML reflows for a 2000-token response), we accumulate text
+        // and run formatMessage at most once per animation frame.
+        let pendingRender = false;
+        let pendingText = '';
+        const scheduleRender = () => {
+            if (pendingRender || !streamingDiv) return;
+            pendingRender = true;
+            requestAnimationFrame(() => {
+                pendingRender = false;
+                try {
+                    const contentDiv = streamingDiv.querySelector('.message-content');
+                    if (contentDiv) {
+                        contentDiv.innerHTML = formatMessage(pendingText);
+                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                    }
+                } catch (e) { /* streaming div may have been removed */ }
+            });
+        };
+
+        const finalizeStream = () => {
+            if (streamFinalized) return;
+            streamFinalized = true;
+            if (streamingDiv) {
+                // Final flush of pending text in case rAF hadn't fired yet
+                if (pendingRender) {
+                    // Cancel pending render and run final render synchronously
+                    pendingRender = false;
+                }
+                try {
+                    const contentDiv = streamingDiv.querySelector('.message-content');
+                    if (contentDiv) contentDiv.innerHTML = formatMessage(fullText);
+                } catch (e) {}
+
+                streamingDiv.id = '';
+                streamingDiv.classList.remove('streaming');
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const meta = document.createElement('div');
+                meta.className = 'message-meta';
+                meta.innerHTML = `
+                    <span class="timestamp">${time}</span>
+                    <div class="msg-actions">
+                        <button class="msg-action-btn copy-msg" title="Copy response">Copy</button>
+                        <button class="msg-action-btn regen-msg" title="Regenerate">Regenerate</button>
+                    </div>
+                `;
+                streamingDiv.querySelector('.message-content').appendChild(meta);
+                chatHistory.push({ role: 'ai', content: fullText });
+                persistChatHistory();
+            } else {
+                // No chunks received (cached or error) - remove loading and show error
+                const el = document.getElementById('loading-message');
+                if (el) el.remove();
+            }
+        };
 
         port.onMessage.addListener((response) => {
             if (!hasStarted && response.chunk) {
@@ -318,53 +509,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (response.chunk && streamingDiv) {
                 fullText += response.chunk;
-                const contentDiv = streamingDiv.querySelector('.message-content');
-                // For streaming, we rebuild the formatted HTML each chunk to support markdown
-                // This is acceptable for small chunks. For large texts, consider appending raw text first.
-                contentDiv.innerHTML = formatMessage(fullText);
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                pendingText = fullText;
+                scheduleRender();
             }
 
             if (response.done) {
-                if (streamingDiv) {
-                    streamingDiv.id = '';
-                    streamingDiv.classList.remove('streaming');
-                    // Add meta bar
-                    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    const meta = document.createElement('div');
-                    meta.className = 'message-meta';
-                    meta.innerHTML = `
-                        <span class="timestamp">${time}</span>
-                        <div class="msg-actions">
-                            <button class="msg-action-btn copy-msg" title="Copy response">Copy</button>
-                            <button class="msg-action-btn regen-msg" title="Regenerate">Regenerate</button>
-                        </div>
-                    `;
-                    streamingDiv.querySelector('.message-content').appendChild(meta);
-                    chatHistory.push({ role: 'ai', content: fullText });
-                } else {
-                    // No chunks received (cached or error) - remove loading and show error
-                    const el = document.getElementById('loading-message');
-                    if (el) el.remove();
-                    if (response.error) {
-                        appendMessage(`Error: ${response.error}`, 'ai');
-                    }
-                }
-                port.disconnect();
+                finalizeStream();
+                try { port.disconnect(); } catch (e) {}
             }
 
             if (response.error && !hasStarted) {
                 const el = document.getElementById('loading-message');
                 if (el) el.remove();
                 appendMessage(`Error: ${response.error}`, 'ai');
-                port.disconnect();
+                try { port.disconnect(); } catch (e) {}
             }
         });
 
+        // When the SW dies mid-stream (side panel was open but SW got killed by Chrome after 30s
+        // idle, or the user closed+reopened the panel), the port disconnects. Without this handler
+        // the user would see a half-finished AI message with no copy/regenerate buttons and no
+        // indication that the stream died. We finalize the partial message so it shows up as a
+        // real (incomplete) AI message with full meta.
         port.onDisconnect.addListener(() => {
-            if (!hasStarted) {
+            if (streamFinalized) return;
+            if (hasStarted) {
+                // SW died mid-stream — finalize what we have
+                finalizeStream();
+                // Append a small "stream interrupted" notice to the streaming div
+                if (streamingDiv) {
+                    const notice = document.createElement('div');
+                    notice.className = 'stream-interrupted-notice';
+                    notice.style.cssText = 'font-size:11px;color:#fca5a5;margin-top:4px;font-style:italic;';
+                    notice.textContent = '⚠ Stream interrupted — message may be incomplete.';
+                    streamingDiv.querySelector('.message-content')?.appendChild(notice);
+                }
+            } else {
+                // SW died before any chunk arrived — show a recoverable error
                 const el = document.getElementById('loading-message');
                 if (el) el.remove();
+                appendMessage('Connection lost. Please try again.', 'ai');
             }
         });
 
@@ -459,6 +643,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearChatBtn.addEventListener('click', () => {
         chatHistory = [];
+        // Clear persisted chat history too — otherwise the cleared chat reappears on next reopen.
+        try {
+            chrome.storage.local.remove(['chatHistory'], () => {
+                if (chrome.runtime.lastError) console.warn('[Viky AI] chatHistory clear failed:', chrome.runtime.lastError.message);
+            });
+        } catch (e) { /* ignore */ }
+        if (pendingChatSave) { clearTimeout(pendingChatSave); pendingChatSave = null; }
         chatMessages.innerHTML = WELCOME_TEMPLATE;
         bindQuickActions();
     });
@@ -588,6 +779,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response && response.success) {
                 currentGeneratedImage = response.data;
                 generatedImages.push({ src: response.data, prompt: prompt });
+                persistImageHistory();
                 renderImageHistory();
                 imageResult.innerHTML = `<img src="${response.data}" alt="${escapeHtml(prompt)}">`;
                 imageResult.classList.add('has-image');
@@ -1845,6 +2037,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                         format: transcribeCurrentAudioFormat
                     });
+                    persistTranscribeHistory();
                     renderTranscribeHistory();
                 } else {
                     showTranscriptResult(`Error: ${response?.error || 'Transcription failed'}`);
@@ -1928,5 +2121,11 @@ document.addEventListener('DOMContentLoaded', () => {
             transcribeHistoryList.appendChild(el);
         });
     }
+
+    // ===== Load persisted state on side-panel open =====
+    // Run any pending migrations first (in case the extension was just updated),
+    // then restore chat history, generated images, and transcriptions from chrome.storage.local
+    // so they survive side-panel close/reopen.
+    runMigrations().then(() => loadPersistedState());
 });
 

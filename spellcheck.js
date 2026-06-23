@@ -64,37 +64,25 @@
     }
 
     // ===== Load Local Spellcheck Engine =====
+    // NOTE: lib/typo.js is now loaded via manifest.json content_scripts (before this file),
+    // so `Typo` is guaranteed to exist in the isolated world. The old <script>-tag injection
+    // loaded typo.js into the MAIN world where this content script couldn't see it.
     function initTypo(callback) {
         if (typoLoaded) { if (callback) callback(); return; }
         if (typeof Typo === 'undefined') {
-            const script = document.createElement('script');
-            script.src = chrome.runtime.getURL('lib/typo.js');
-            script.onload = () => {
-                typo = new Typo(
-                    chrome.runtime.getURL('dict/en_US.dic'),
-                    chrome.runtime.getURL('dict/en_US.aff'),
-                    () => {
-                        typoLoaded = true;
-                        console.log('Viky AI: Local dictionary loaded');
-                        if (callback) callback();
-                    },
-                    { ignoreCase: true }
-                );
-            };
-            script.onerror = () => console.error('Viky AI: Failed to load typo.js');
-            document.head.appendChild(script);
-        } else {
-            typo = new Typo(
-                chrome.runtime.getURL('dict/en_US.dic'),
-                chrome.runtime.getURL('dict/en_US.aff'),
-                () => {
-                    typoLoaded = true;
-                    console.log('Viky AI: Local dictionary loaded');
-                    if (callback) callback();
-                },
-                { ignoreCase: true }
-            );
+            console.error('Viky AI: Typo is undefined — check that lib/typo.js is listed in manifest.json content_scripts.js BEFORE spellcheck.js');
+            return;
         }
+        typo = new Typo(
+            chrome.runtime.getURL('dict/en_US.dic'),
+            chrome.runtime.getURL('dict/en_US.aff'),
+            () => {
+                typoLoaded = true;
+                console.log('Viky AI: Local dictionary loaded');
+                if (callback) callback();
+            },
+            { ignoreCase: true }
+        );
     }
 
     // ===== Create overlay container in Shadow DOM =====

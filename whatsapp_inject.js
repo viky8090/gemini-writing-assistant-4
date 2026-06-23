@@ -383,6 +383,28 @@
     }
 
     function extractMsgFromFiber(el) {
+        const msg = extractMsgModelFromFiber(el);
+        if (!msg) return null;
+        const body = msg.body || (typeof msg.get === 'function' ? msg.get('body') : null);
+        const caption = msg.caption || (typeof msg.get === 'function' ? msg.get('caption') : null);
+        const type = msg.type || (typeof msg.get === 'function' ? msg.get('type') : null);
+        if (type && type !== 'revoked' && type !== 'recalled') {
+            const val = body || caption;
+            if (val) {
+                const cleaned = cleanTextForCheck(val);
+                if (!DELETED_PLACEHOLDERS.some(pl => cleaned.includes(pl))) {
+                    return val;
+                }
+            }
+        }
+        return null;
+    }
+
+    // Returns the raw WhatsApp message model object from a DOM element's React fiber.
+    // Used by: Like button (Reactions.sendReaction(msg, emoji)),
+    //          Mark Read/Unread (resolve chat from msg),
+    //          Audio transcription (msg.clientUrl / msg.deprecatedMms3Url).
+    function extractMsgModelFromFiber(el) {
         if (!el) return null;
         try {
             const fiberKey = Object.keys(el).find(k =>
@@ -393,26 +415,13 @@
                 while (fiber && depth < 30) {
                     const p = fiber.memoizedProps || fiber.pendingProps || {};
                     const msg = p.msg || p.message;
-                    if (msg) {
-                        const body = msg.body || (typeof msg.get === 'function' ? msg.get('body') : null);
-                        const caption = msg.caption || (typeof msg.get === 'function' ? msg.get('caption') : null);
-                        const type = msg.type || (typeof msg.get === 'function' ? msg.get('type') : null);
-                        if (type && type !== 'revoked' && type !== 'recalled') {
-                            const val = body || caption;
-                            if (val) {
-                                const cleaned = cleanTextForCheck(val);
-                                if (!DELETED_PLACEHOLDERS.some(pl => cleaned.includes(pl))) {
-                                    return val;
-                                }
-                            }
-                        }
-                    }
+                    if (msg) return msg;
                     fiber = fiber.return;
                     depth++;
                 }
             }
         } catch (e) {
-            console.error('[Viky AI] Error extracting from fiber:', e);
+            console.error('[Viky AI] Error extracting msg model from fiber:', e);
         }
         return null;
     }
@@ -535,16 +544,12 @@
         // Attempt 1: immediate
         backupNodeAndChildren(elementNode);
 
-        // Attempt 1a, 1b, 1c, 1d: micro-timeouts to beat rapid deletions (50ms, 100ms, 150ms, 200ms)
-        setTimeout(() => backupNodeAndChildren(elementNode), 50);
-        setTimeout(() => backupNodeAndChildren(elementNode), 100);
-        setTimeout(() => backupNodeAndChildren(elementNode), 150);
-        setTimeout(() => backupNodeAndChildren(elementNode), 200);
-
-        // Attempt 2: after 300ms (React may not have rendered text yet)
-        setTimeout(() => backupNodeAndChildren(elementNode), 300);
-
-        // Attempt 3: after 1s (safety net for slow renders / lazy-loaded content)
+        // Attempt 2: 250ms (React may not have rendered text yet).
+        // Attempt 3: 1000ms (safety net for slow renders / lazy-loaded content).
+        // NOTE: previously scheduled 6 timers per DOM mutation (50/100/150/200/300/1000ms).
+        // On a 10-message burst that was 60 pending timers, each doing a full DOM walk.
+        // Two retries is enough — WhatsApp renders messages in <200ms in normal conditions.
+        setTimeout(() => backupNodeAndChildren(elementNode), 250);
         setTimeout(() => backupNodeAndChildren(elementNode), 1000);
     }
 
@@ -864,7 +869,10 @@
         Seen: false,
         Status: false,
         Msg: false,
-        Chat: false
+        Chat: false,
+        Reactions: false,
+        Cmd: false,
+        MediaPreloader: false
     };
 
     // Helper to expose modules to both window.Store and window.VikyStore
@@ -900,7 +908,19 @@
 
     // Helper functions for each individual store hook
     function hookPresence(exp) {
-        const target = exp.sendChatStateComposing || exp.sendChatStateRecording || exp.sendChatState || exp.markComposing || (exp.default && (exp.default.sendChatStateComposing || exp.default.sendChatStateRecording || exp.default.sendChatState || exp.default.markComposing)) ? (exp.sendChatStateComposing || exp.sendChatState || exp.markComposing ? exp : exp.default) : null;
+        // Look for the Presence module. It exports sendChatState* AND/OR sendPresence*.
+        // We accept a wide candidate list because WhatsApp rotates names.
+        const candidates = [
+            'sendChatStateComposing', 'sendChatStateRecording', 'sendChatStatePaused',
+            'sendChatState', 'markComposing', 'markRecording', 'markPaused',
+            'sendPresenceAvailable', 'sendPresenceUnavailable', 'updatePresence',
+            'updateChatState'
+        ];
+        const hasAny = candidates.some(name => typeof exp[name] === 'function') ||
+                       (exp.default && candidates.some(name => typeof exp.default[name] === 'function'));
+        if (!hasAny) return false;
+        // Prefer the non-default object if it has any candidate, else fall back to default.
+        const target = candidates.some(name => typeof exp[name] === 'function') ? exp : exp.default;
         if (!target) return false;
 
         exposeStore('Presence', target);
@@ -961,6 +981,34 @@
              applied = true;
              console.log("[Viky AI] Hooked updateChatState successfully.");
         }
+
+        // Hide Online: hook the high-level presence-available senders.
+        // These are the functions WhatsApp calls when it wants to broadcast "I'm online".
+        // Combined with the low-level <presence type="available"/> suppression in hookNodeSender,
+        // this gives us defense-in-depth — if WhatsApp changes one path, the other still catches it.
+        ['sendPresenceAvailable', 'sendPresenceUnavailable', 'updatePresence'].forEach(funcName => {
+            const origFn = target[funcName];
+            if (typeof origFn === 'function' && !origFn.__isVikyHooked) {
+                const hookedFn = function(...args) {
+                    if (settings.wa_private_mode_enabled && settings.wa_hide_online) {
+                        // For sendPresenceUnavailable, allowing "going offline" is fine.
+                        // For sendPresenceAvailable/updatePresence, suppress entirely.
+                        if (funcName === 'sendPresenceUnavailable') {
+                            return origFn.apply(this, args);
+                        }
+                        console.log("[Viky AI] Suppressed " + funcName + " (hide online)");
+                        return Promise.resolve();
+                    }
+                    return origFn.apply(this, args);
+                };
+                hookedFn.__isVikyHooked = true;
+                try { target[funcName] = hookedFn; } catch (e) {
+                    Object.defineProperty(target, funcName, { value: hookedFn, writable: true, configurable: true });
+                }
+                applied = true;
+                console.log("[Viky AI] Hooked " + funcName + " (presence broadcast) successfully.");
+            }
+        });
 
         return applied;
     }
@@ -1031,6 +1079,55 @@
         if (!target) return false;
 
         exposeStore('Chat', target);
+        return true;
+    }
+
+    // Hook the Reactions module so we can send real emoji reactions from our Like button.
+    // Previous implementation inserted the emoji as text and clicked Send — that sent a NEW message.
+    function hookReactions(exp) {
+        const candidateNames = ['sendReaction', 'sendReactionToMessage', 'reactToMessage'];
+        const target = candidateNames.some(n => typeof exp[n] === 'function')
+            ? exp
+            : (exp.default && candidateNames.some(n => typeof exp.default[n] === 'function') ? exp.default : null);
+        if (!target) return false;
+
+        exposeStore('Reactions', target);
+        if (!target.__isVikyHooked) {
+            target.__isVikyHooked = true;
+            console.log("[Viky AI] Exposed Reactions module (sendReaction).");
+        }
+        return true;
+    }
+
+    // Hook the Cmd module so we can mark chats read/unread from our hover button.
+    function hookCmd(exp) {
+        const candidateNames = ['markChatUnread', 'markChatRead', 'sendSeen', 'markUnread'];
+        const target = candidateNames.some(n => typeof exp[n] === 'function')
+            ? exp
+            : (exp.default && candidateNames.some(n => typeof exp.default[n] === 'function') ? exp.default : null);
+        if (!target) return false;
+
+        exposeStore('Cmd', target);
+        if (!target.__isVikyHooked) {
+            target.__isVikyHooked = true;
+            console.log("[Viky AI] Exposed Cmd module (markChatRead/Unread).");
+        }
+        return true;
+    }
+
+    // Hook the MediaPreloader / MediaObject module so we can fetch voice-note audio blobs
+    // directly from the message model — without requiring an <audio> element to exist in the DOM.
+    function hookMediaPreloader(exp) {
+        const candidateNames = ['getBlob', 'getMediaBlob', 'downloadMedia', 'getOrCreateMediaObject'];
+        const target = candidateNames.some(n => typeof exp[n] === 'function')
+            ? exp
+            : (exp.default && candidateNames.some(n => typeof exp.default[n] === 'function') ? exp.default : null);
+        if (!target) return false;
+        exposeStore('MediaPreloader', target);
+        if (!target.__isVikyHooked) {
+            target.__isVikyHooked = true;
+            console.log("[Viky AI] Exposed MediaPreloader module.");
+        }
         return true;
     }
 
@@ -1246,8 +1343,13 @@
         // Backup currently loaded messages immediately to prevent missing the first messages
         backupLoadedMessages();
 
-        // Periodically backup existing/loaded messages
-        setInterval(backupLoadedMessages, 2000);
+        // NOTE: previously had a perpetual `setInterval(backupLoadedMessages, 2000)` here.
+        // Removed because: (a) the add/change event listeners above already capture every
+        // new and modified message in real time, (b) on a 10,000-message chat this interval
+        // alone burned 10,000 backupMessage() calls every 2 seconds, each doing multiple
+        // regex passes + localStorage lookups, (c) it kept the main thread busy enough to
+        // make WhatsApp Web feel sluggish. The initial backup above covers the gap between
+        // page load and MsgStore-hook-installation.
 
         target.__isVikyHooked = true;
         console.log("[Viky AI] Hooked MsgStore successfully.");
@@ -1267,6 +1369,7 @@
                             const type = attrs.type;
                             const isHideTyping = settings.wa_private_mode_enabled && settings.wa_hide_typing;
                             const isHideRecording = settings.wa_private_mode_enabled && settings.wa_hide_recording;
+                            const isHideOnline = settings.wa_private_mode_enabled && settings.wa_hide_online;
 
                             if (type === 'composing' && isHideTyping) {
                                 console.log("[Viky AI] Suppressed composing node:", node);
@@ -1280,6 +1383,25 @@
                                 console.log("[Viky AI] Suppressed paused node:", node);
                                 return Promise.resolve({ tag: 'ack', attrs: {} });
                             }
+                            // Hide Online: suppress <presence type="available"/> stanzas.
+                            // We do NOT suppress type="unavailable" — going offline is fine.
+                            // The "available" presence is what broadcasts "online" to other users.
+                            if (type === 'available' && isHideOnline) {
+                                console.log("[Viky AI] Suppressed presence-available (hide online)");
+                                return Promise.resolve({ tag: 'ack', attrs: {} });
+                            }
+                        }
+                        // Pattern 1b: Node Object - node.tag === 'receipt' (audio played receipts)
+                        // WhatsApp sends <receipt type="played" id="..." .../> when a voice note finishes playing.
+                        // Suppress these to honor "Play Audio Privately".
+                        if (typeof node === 'object' && node.tag === 'receipt') {
+                            const attrs = node.attrs || {};
+                            const isPlayAudioPrivately = settings.wa_private_mode_enabled && settings.wa_play_audio_privately;
+                            if (isPlayAudioPrivately && (attrs.type === 'played' || attrs.type === 'read')) {
+                                // Only suppress "played"/"read" receipts (not "delivered" — that's for the sender, not the receiver).
+                                console.log("[Viky AI] Suppressed audio played receipt (play audio privately)");
+                                return Promise.resolve({ tag: 'ack', attrs: {} });
+                            }
                         }
                         // Pattern 2: Positional Arguments - args[0] === 'presence'
                         if (typeof node === 'string' && node === 'presence') {
@@ -1287,6 +1409,7 @@
                             const type = attrs.type;
                             const isHideTyping = settings.wa_private_mode_enabled && settings.wa_hide_typing;
                             const isHideRecording = settings.wa_private_mode_enabled && settings.wa_hide_recording;
+                            const isHideOnline = settings.wa_private_mode_enabled && settings.wa_hide_online;
 
                             if (type === 'composing' && isHideTyping) {
                                 console.log("[Viky AI] Suppressed composing args:", args);
@@ -1298,6 +1421,19 @@
                             }
                             if (type === 'paused' && isHideTyping) {
                                 console.log("[Viky AI] Suppressed paused args:", args);
+                                return Promise.resolve({ tag: 'ack', attrs: {} });
+                            }
+                            if (type === 'available' && isHideOnline) {
+                                console.log("[Viky AI] Suppressed presence-available (hide online)");
+                                return Promise.resolve({ tag: 'ack', attrs: {} });
+                            }
+                        }
+                        // Pattern 2b: Positional args - args[0] === 'receipt'
+                        if (typeof node === 'string' && node === 'receipt') {
+                            const attrs = args[1] || {};
+                            const isPlayAudioPrivately = settings.wa_private_mode_enabled && settings.wa_play_audio_privately;
+                            if (isPlayAudioPrivately && (attrs.type === 'played' || attrs.type === 'read')) {
+                                console.log("[Viky AI] Suppressed audio played receipt (play audio privately)");
                                 return Promise.resolve({ tag: 'ack', attrs: {} });
                             }
                         }
@@ -1413,6 +1549,17 @@
                 }
             }
 
+            // Best-effort: Reactions, Cmd, MediaPreloader (action helpers, not privacy hooks)
+            if (!hooksApplied.Reactions) {
+                try { if (hookReactions(exp)) hooksApplied.Reactions = true; } catch (e) {}
+            }
+            if (!hooksApplied.Cmd) {
+                try { if (hookCmd(exp)) hooksApplied.Cmd = true; } catch (e) {}
+            }
+            if (!hooksApplied.MediaPreloader) {
+                try { if (hookMediaPreloader(exp)) hooksApplied.MediaPreloader = true; } catch (e) {}
+            }
+
             // Node Senders (Low-level interceptors)
             try {
                 checkAndHookNodeSenders(exp);
@@ -1431,7 +1578,9 @@
         scanAndApplyHooks();
         scanCounter++;
 
-        // If all stores are hooked, we can transition to a relaxed cycle
+        // If all CORE privacy hooks are applied, we can transition to a relaxed cycle.
+        // (Reactions/Cmd/MediaPreloader are best-effort and may never be found if the user
+        // hasn't opened a chat — don't block the relaxed-cycle switch on them.)
         const allApplied = hooksApplied.Presence && hooksApplied.Seen && hooksApplied.Status && hooksApplied.Chat && hooksApplied.Msg;
         if (allApplied) {
             clearInterval(scannerInterval);
@@ -1681,11 +1830,20 @@
             }
         }, 500);
 
-        // Also watch for navigation changes that might remove and re-render the sidebar
+        // Also watch for navigation changes that might remove and re-render the sidebar.
+        // DEBOUNCED: WhatsApp's DOM mutates hundreds of times per second (typing indicators,
+        // message renders, presence updates). Without debouncing, this observer would call
+        // injectVikySidebarIcon() on every mutation — even though the icon is almost always
+        // still present. The 500ms trailing debounce collapses the burst into one check.
+        let sidebarObserverTimer = null;
         const sidebarObserver = new MutationObserver(() => {
-            if (!document.getElementById('viky-sidebar-icon')) {
-                injectVikySidebarIcon();
-            }
+            if (sidebarObserverTimer) return;
+            sidebarObserverTimer = setTimeout(() => {
+                sidebarObserverTimer = null;
+                if (!document.getElementById('viky-sidebar-icon')) {
+                    injectVikySidebarIcon();
+                }
+            }, 500);
         });
         if (document.body) {
             sidebarObserver.observe(document.body, { childList: true, subtree: true });
@@ -1782,19 +1940,29 @@
 
         let lastInserted = reactBtn;
 
-        // Inject Like button
+        // Inject Like button — uses WhatsApp's real Reactions API (no more "send new message" bug)
         if (settings.wa_like_button) {
             const likeBtn = createVikyActionBtn('like', '👍', 'Quick Like (Viky)', () => {
-                const footer = document.querySelector('footer');
-                if (!footer) return;
-                const inputContainer = footer.querySelector('div[contenteditable="true"]');
-                if (!inputContainer) return;
-                inputContainer.focus();
-                document.execCommand('insertText', false, '👍');
-                setTimeout(() => {
-                    const sendBtn = footer.querySelector('span[data-icon="send"]');
-                    if (sendBtn) sendBtn.click();
-                }, 100);
+                const msg = extractMsgModelFromFiber(msgBubble);
+                if (!msg) {
+                    console.warn('[Viky AI] Could not resolve message model for Like button');
+                    return;
+                }
+                const reactions = window.VikyStore && window.VikyStore.Reactions;
+                if (!reactions || typeof reactions.sendReaction !== 'function') {
+                    console.warn('[Viky AI] Reactions module not yet exposed — try opening a chat first');
+                    return;
+                }
+                try {
+                    // sendReaction(msg, emoji) — emoji must be a single grapheme.
+                    // WhatsApp's internal API toggles the reaction off if the same emoji is sent again.
+                    const result = reactions.sendReaction(msg, '👍');
+                    if (result && typeof result.catch === 'function') {
+                        result.catch(err => console.error('[Viky AI] sendReaction failed:', err));
+                    }
+                } catch (err) {
+                    console.error('[Viky AI] Like button error:', err);
+                }
             });
             
             if (lastInserted) {
@@ -1803,6 +1971,66 @@
             } else {
                 actionBar.appendChild(likeBtn);
                 lastInserted = likeBtn;
+            }
+        }
+
+        // Inject Mark Read/Unread button — uses WhatsApp's Cmd module
+        if (settings.wa_mark_read_unread) {
+            const markBtn = createVikyActionBtn('markread', '✓', 'Mark Read/Unread (Viky)', () => {
+                const msg = extractMsgModelFromFiber(msgBubble);
+                if (!msg) {
+                    console.warn('[Viky AI] Could not resolve message model for Mark Read/Unread');
+                    return;
+                }
+                const cmd = window.VikyStore && window.VikyStore.Cmd;
+                const chatStore = window.VikyStore && window.VikyStore.Chat;
+                if (!cmd) {
+                    console.warn('[Viky AI] Cmd module not yet exposed');
+                    return;
+                }
+
+                try {
+                    // Resolve the chat this message belongs to. WA's msg has a `chat` ref in some versions;
+                    // otherwise we look it up by id in the Chat store.
+                    let chat = msg.chat || (typeof msg.get === 'function' ? msg.get('chat') : null);
+                    if (!chat && chatStore) {
+                        // Try iterating active chats to find one whose msgs include this id
+                        const msgId = msg.id && (msg.id._serialized || msg.id.id);
+                        if (msgId && chatStore.models) {
+                            for (const c of chatStore.models) {
+                                const msgs = c.msgs || (c.get && c.get('msgs'));
+                                if (msgs && typeof msgs.get === 'function' && msgs.get(msgId)) {
+                                    chat = c;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!chat) {
+                        console.warn('[Viky AI] Could not resolve chat for Mark Read/Unread');
+                        return;
+                    }
+
+                    // Toggle: if chat has unread count, mark read; else mark unread.
+                    const unreadCount = chat.unreadCount || (typeof chat.get === 'function' ? chat.get('unreadCount') : 0) || 0;
+                    if (unreadCount > 0) {
+                        if (typeof cmd.markChatRead === 'function') cmd.markChatRead(chat);
+                        else if (typeof cmd.sendSeen === 'function') cmd.sendSeen(chat);
+                    } else {
+                        if (typeof cmd.markChatUnread === 'function') cmd.markChatUnread(chat);
+                        else if (typeof cmd.markUnread === 'function') cmd.markUnread(chat);
+                    }
+                } catch (err) {
+                    console.error('[Viky AI] Mark Read/Unread error:', err);
+                }
+            });
+
+            if (lastInserted) {
+                lastInserted.insertAdjacentElement('afterend', markBtn);
+                lastInserted = markBtn;
+            } else {
+                actionBar.appendChild(markBtn);
+                lastInserted = markBtn;
             }
         }
 
@@ -2152,7 +2380,10 @@
             item.addEventListener('click', () => {
                 // Dismiss menu
                 document.body.click();
-                transcribeAudio(activeMsgElement.querySelector('audio'));
+                // Pass the entire message bubble — transcribeAudio will resolve the audio source
+                // from the React fiber (msg.clientUrl / msg.deprecatedMms3Url) which works even
+                // for voice notes that haven't been played yet (no <audio> element in DOM).
+                transcribeAudio(activeMsgElement);
             });
 
             menu.appendChild(item);
@@ -2180,7 +2411,7 @@
 
         const requestId = 'translate-' + Math.random().toString(36).substr(2, 9);
         
-        // Post message to ISOLATED content script
+        // Post message to ISOLATED content script (same-origin — no need for '*')
         window.postMessage({
             sender: 'viky-wa-inject',
             action: 'TRANSLATE_TEXT',
@@ -2189,7 +2420,7 @@
                 action: 'TRANSLATE_TEXT',
                 text: originalText
             }
-        }, '*');
+        }, location.origin);
 
         // Wait for response
         const listener = (event) => {
@@ -2207,13 +2438,12 @@
     }
 
     // Call transcription helper
-    function transcribeAudio(audioEl) {
-        if (!audioEl || !audioEl.src) {
-            alert("No audio tag found in this bubble.");
-            return;
-        }
-
-        const msgBubble = audioEl.closest('.message-in, .message-out');
+    // Transcribe a voice note. Accepts the message bubble element.
+    // Resolution order for the audio source:
+    //   1. An existing <audio> element inside the bubble (only present if user already played it).
+    //   2. msg.clientUrl / msg.deprecatedMms3Url from the React fiber model (works for unplayed notes).
+    //   3. Store.MediaPreloader.getBlob(msg) if available.
+    function transcribeAudio(msgBubble) {
         if (!msgBubble) return;
 
         let transcribeDiv = msgBubble.querySelector('.viky-transcription-div');
@@ -2229,44 +2459,97 @@
         }
         transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> Fetching audio and transcribing...`;
 
-        // Fetch audio blob and convert to Base64
-        fetch(audioEl.src)
-            .then(res => res.blob())
-            .then(blob => {
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    const base64Data = reader.result.split(',')[1];
-                    const requestId = 'transcribe-' + Math.random().toString(36).substr(2, 9);
-                    
-                    window.postMessage({
-                        sender: 'viky-wa-inject',
+        // Helper that takes a Blob and ships it to the background for transcription.
+        function shipBlobToTranscriber(blob) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const base64Data = reader.result.split(',')[1];
+                const requestId = 'transcribe-' + Math.random().toString(36).substr(2, 9);
+                window.postMessage({
+                    sender: 'viky-wa-inject',
+                    action: 'TRANSCRIBE_AUDIO',
+                    requestId: requestId,
+                    payload: {
                         action: 'TRANSCRIBE_AUDIO',
-                        requestId: requestId,
-                        payload: {
-                            action: 'TRANSCRIBE_AUDIO',
-                            audioBase64: base64Data
-                        }
-                    }, '*');
+                        audioBase64: base64Data
+                    }
+                }, location.origin);
 
-                    const listener = (event) => {
-                        if (event.data && event.data.sender === 'viky-wa-content' && event.data.action === 'TRANSCRIBE_AUDIO_RESPONSE' && event.data.requestId === requestId) {
-                            window.removeEventListener('message', listener);
-                            const res = event.data.response;
-                            if (res && res.success) {
-                                transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> "${res.text}"`;
-                            } else {
-                                transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> Transcription failed (${res ? res.error : 'Unknown'}).`;
-                            }
+                const listener = (event) => {
+                    if (event.data && event.data.sender === 'viky-wa-content' &&
+                        event.data.action === 'TRANSCRIBE_AUDIO_RESPONSE' &&
+                        event.data.requestId === requestId) {
+                        window.removeEventListener('message', listener);
+                        const res = event.data.response;
+                        if (res && res.success) {
+                            transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> "${res.text}"`;
+                        } else {
+                            transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> Transcription failed (${res ? res.error : 'Unknown'}).`;
                         }
-                    };
-                    window.addEventListener('message', listener);
+                    }
                 };
-                reader.readAsDataURL(blob);
-            })
-            .catch(err => {
-                console.error("[Viky AI] Failed to fetch audio blob", err);
-                transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> Failed to fetch audio stream.`;
-            });
+                window.addEventListener('message', listener);
+            };
+            reader.readAsDataURL(blob);
+        }
+
+        // Helper invoked when all fast paths fail — shows a helpful error.
+        function fail(message) {
+            console.error('[Viky AI] transcribeAudio:', message);
+            transcribeDiv.innerHTML = `🎙️ <strong>Viky Transcript:</strong> ${message}`;
+        }
+
+        // Strategy 1: existing <audio> element in DOM (only present if user already played it)
+        const audioEl = msgBubble.querySelector('audio');
+        if (audioEl && audioEl.src) {
+            fetch(audioEl.src)
+                .then(res => res.blob())
+                .then(shipBlobToTranscriber)
+                .catch(err => fail('Failed to fetch audio stream.'));
+            return;
+        }
+
+        // Strategy 2: pull the audio URL from the message model and fetch it directly.
+        // WhatsApp stores the decrypted media URL on msg.clientUrl (newer builds) or
+        // msg.deprecatedMms3Url (older builds). The URL is on WhatsApp's CDN and
+        // requires the same cookies/headers the page already has — same-origin fetch works.
+        const msg = extractMsgModelFromFiber(msgBubble);
+        if (!msg) {
+            fail('Could not resolve the message. Try playing the voice note first, then transcribe.');
+            return;
+        }
+        const clientUrl = msg.clientUrl ||
+                          (typeof msg.get === 'function' ? (msg.get('clientUrl') || msg.get('deprecatedMms3Url')) : null) ||
+                          msg.deprecatedMms3Url;
+        if (clientUrl) {
+            fetch(clientUrl)
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.blob();
+                })
+                .then(shipBlobToTranscriber)
+                .catch(err => fail(`Could not download audio (${err.message}). Try playing it first.`));
+            return;
+        }
+
+        // Strategy 3: Store.MediaPreloader.getBlob(msg) — may or may not exist depending on WA build.
+        const preloader = window.VikyStore && window.VikyStore.MediaPreloader;
+        if (preloader && typeof preloader.getBlob === 'function') {
+            try {
+                const result = preloader.getBlob(msg);
+                if (result && typeof result.then === 'function') {
+                    result.then(shipBlobToTranscriber).catch(() => fail('MediaPreloader failed.'));
+                    return;
+                } else if (result instanceof Blob) {
+                    shipBlobToTranscriber(result);
+                    return;
+                }
+            } catch (e) {
+                console.warn('[Viky AI] MediaPreloader.getBlob threw:', e);
+            }
+        }
+
+        fail('No audio source available. Try playing the voice note first, then right-click → Transcribe Audio.');
     }
 
     // Observe changes to document tree
@@ -2324,7 +2607,21 @@
         scanForStatusViewer();
     });
 
-    domObserver.observe(document.body, { childList: true, subtree: true });
+    // Observe changes to document tree.
+    // NOTE: This script is injected at document_start, so document.body may not exist yet
+    // when we reach this line. Guard with a waitForBody helper to avoid aborting the entire
+    // IIFE — which would silently disable every webpack-based privacy feature below.
+    function startDomObserver() {
+        if (!document.body) {
+            // body not parsed yet — retry on next microtask
+            return requestAnimationFrame(startDomObserver);
+        }
+        try {
+            domObserver.observe(document.body, { childList: true, subtree: true });
+        } catch (e) {
+            console.error("[Viky AI] Failed to start DOM observer:", e);
+        }
+    }
 
     // Set up periodic fallback scans for the status downloader (robust against race conditions)
     setInterval(scanForStatusViewer, 1000);
@@ -2347,6 +2644,18 @@
         }
         if (!hooksApplied.Msg) {
             if (hookMsgStore(exp)) hooksApplied.Msg = true;
+        }
+        // Best-effort exposure for action helpers (Reactions, Cmd, MediaPreloader).
+        // These don't need to be "applied" with hooks — they just need to be exposed
+        // on window.Store so our click handlers can call them.
+        if (!hooksApplied.Reactions) {
+            if (hookReactions(exp)) hooksApplied.Reactions = true;
+        }
+        if (!hooksApplied.Cmd) {
+            if (hookCmd(exp)) hooksApplied.Cmd = true;
+        }
+        if (!hooksApplied.MediaPreloader) {
+            if (hookMediaPreloader(exp)) hooksApplied.MediaPreloader = true;
         }
         
         // Low-level node senders (Low-level presence packet interceptors)
@@ -2405,37 +2714,111 @@
         console.log("[Viky AI] Hooked chunkArray.push successfully.");
     }
 
-    try {
-        const chunkName = "webpackChunkwhatsapp_web_client";
-        let chunkArray = window[chunkName];
-        if (chunkArray) {
-            hookPush(chunkArray);
-        } else {
-            let val = [];
-            Object.defineProperty(window, chunkName, {
-                get: () => val,
-                set: (newVal) => {
-                    val = newVal;
-                    hookPush(val);
-                },
-                configurable: true
-            });
+    // ===== Dynamic Webpack Chunk-Array Discovery =====
+    // The original code hardcoded "webpackChunkwhatsapp_web_client". WhatsApp has rotated
+    // this name multiple times before (webpackChunkwhatsapp_web, webpackChunkwhatsapp_web_stable,
+    // webpackChunkweb_whatsapp, etc.) — when they rename it again, every webpack-based feature
+    // would silently die. The new approach:
+    //   1. Scan window for any existing key matching /^webpackChunk/
+    //   2. Install a Proxy/set trap on window to catch chunk arrays created AFTER our script runs
+    //   3. Hook push() on every chunk array we find (multiple may exist for worker bundles)
+    const hookedChunkArrays = new WeakSet();
+    const discoveredChunkNames = new Set();
+
+    function registerChunkArray(arr, source) {
+        if (!arr || !Array.isArray(arr)) return;
+        if (hookedChunkArrays.has(arr)) return;
+        try {
+            hookedChunkArrays.add(arr);
+            hookPush(arr);
+            discoveredChunkNames.add(source);
+            console.log(`[Viky AI] Hooked webpack chunk array: ${source}`);
+
+            // Push a parasite chunk to grab webpackRequire in case some chunks already loaded.
+            // Multiple chunk arrays may exist — pushing to all of them is fine; only the
+            // main one will hand us a working webpackRequire.
+            const parasiteId = "viky-parasite-" + Math.random().toString(36).substr(2, 9);
+            arr.push([
+                [parasiteId],
+                {},
+                function(o) {
+                    if (o && !webpackRequire) {
+                        webpackRequire = o;
+                        scanAndApplyHooks();
+                    }
+                }
+            ]);
+        } catch (e) {
+            console.warn(`[Viky AI] Failed to hook chunk array from ${source}:`, e);
         }
-        
-        // Also push a standard parasite chunk in case some chunks have already loaded and we can catch the require reference
-        const parasiteId = "viky-parasite-" + Math.random().toString(36).substr(2, 9);
-        window[chunkName] = window[chunkName] || [];
-        window[chunkName].push([
-            [parasiteId],
-            {},
-            function(o) {
-                webpackRequire = o;
-                scanAndApplyHooks();
+    }
+
+    try {
+        // Step 1: scan existing window keys for webpack chunk arrays
+        for (const key of Object.keys(window)) {
+            if (/^webpackChunk/i.test(key)) {
+                registerChunkArray(window[key], key);
             }
-        ]);
-        console.log("[Viky AI] Webpack parasite initialized.");
+        }
+
+        // Step 2: install a trap on window so chunk arrays created AFTER our script runs
+        // (e.g. by lazy-loaded code splits) are also caught.
+        // We use a per-key defineProperty trap because Proxying the global window is fragile.
+        const origDefineProperty = Object.defineProperty;
+        const checkedKeys = new Set(Object.keys(window));
+        const checkNewKeys = () => {
+            for (const key of Object.keys(window)) {
+                if (checkedKeys.has(key)) continue;
+                checkedKeys.add(key);
+                if (/^webpackChunk/i.test(key)) {
+                    registerChunkArray(window[key], key);
+                }
+            }
+        };
+        // Poll for new keys for the first 30 seconds (covers most lazy-load scenarios).
+        // Cheap: Object.keys(window) is fast and we only do this for 30s.
+        let keyScanCount = 0;
+        const keyScanInterval = setInterval(() => {
+            keyScanCount++;
+            checkNewKeys();
+            if (keyScanCount >= 60) { // 60 * 500ms = 30s
+                clearInterval(keyScanInterval);
+            }
+        }, 500);
+
+        // Step 3: also handle the legacy hardcoded name as a fallback.
+        // If WhatsApp hasn't renamed it, this gives us a faster hookup (no polling needed).
+        const LEGACY_CHUNK_NAME = "webpackChunkwhatsapp_web_client";
+        if (window[LEGACY_CHUNK_NAME] && !hookedChunkArrays.has(window[LEGACY_CHUNK_NAME])) {
+            registerChunkArray(window[LEGACY_CHUNK_NAME], LEGACY_CHUNK_NAME);
+        } else if (!window[LEGACY_CHUNK_NAME]) {
+            // Set up the trap for the legacy name in case WhatsApp creates it later
+            let val = [];
+            try {
+                Object.defineProperty(window, LEGACY_CHUNK_NAME, {
+                    get: () => val,
+                    set: (newVal) => {
+                        val = newVal;
+                        registerChunkArray(val, LEGACY_CHUNK_NAME);
+                    },
+                    configurable: true
+                });
+            } catch (e) {
+                // defineProperty can throw if the property already exists as a non-configurable
+                // data property — that's fine, the key-scan loop above will pick it up.
+            }
+        }
+
+        if (discoveredChunkNames.size === 0) {
+            console.log("[Viky AI] No webpack chunk arrays found yet — will pick them up when WhatsApp loads them.");
+        } else {
+            console.log(`[Viky AI] Webpack parasite initialized on ${discoveredChunkNames.size} chunk array(s):`, Array.from(discoveredChunkNames).join(', '));
+        }
     } catch (e) {
         console.error("[Viky AI] Failed to initialize Webpack parasite loader", e);
     }
+
+    // Kick off DOM observation (waits for body if necessary)
+    startDomObserver();
 
 })();

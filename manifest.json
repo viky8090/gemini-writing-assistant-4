@@ -24,7 +24,9 @@
     "https://image.pollinations.ai/*",
     "https://us-central1-viky-ai-backend.cloudfunctions.net/*",
     "https://viky-ai-proxy.*.workers.dev/*",
-    "https://www.youtube.com/*"
+    "https://www.youtube.com/*",
+    "https://accounts.google.com/*",
+    "https://www.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -46,6 +48,7 @@
         "<all_urls>"
       ],
       "js": [
+        "lib/typo.js",
         "spellcheck.js",
         "content.js",
         "web_assistant.js"
@@ -64,8 +67,16 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["lib/*", "dict/*", "whatsapp_inject.js", "youtube_inject.js", "icons/*"],
+      "resources": ["lib/*", "dict/*", "icons/*"],
       "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["whatsapp_inject.js"],
+      "matches": ["https://web.whatsapp.com/*"]
+    },
+    {
+      "resources": ["youtube_inject.js"],
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"]
     }
   ],
   "icons": {

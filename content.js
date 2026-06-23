@@ -97,14 +97,17 @@
 }
 
 /* ===== Animations ===== */
+/* NOTE: removed 'filter: blur(...)' from all keyframes below — animating filter
+   has no compositor fast-path and repaints a large region every frame. The opacity
+   + transform combo alone produces an equivalent visual effect at ~1/100th the cost. */
 @keyframes fadeInScale {
-    0% { opacity: 0; transform: scale(0.7) translateY(10px); filter: blur(4px); }
-    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+    0% { opacity: 0; transform: scale(0.7) translateY(10px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 @keyframes slideUpFade {
-    0% { opacity: 0; transform: translateY(15px) scale(0.97); filter: blur(3px); }
-    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    0% { opacity: 0; transform: translateY(15px) scale(0.97); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes spin {
@@ -193,7 +196,7 @@
     background: var(--accent-primary);
     color: var(--bg-surface);
     font-size: 14px;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     border-radius: var(--radius-xl);
     box-shadow: 0 0 10px var(--accent-glow);
 }
@@ -241,7 +244,7 @@
     justify-content: center;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     position: relative;
 }
 
@@ -278,7 +281,7 @@
     white-space: nowrap;
     opacity: 0;
     pointer-events: none;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     box-shadow: var(--shadow-md);
     z-index: 2147483647;
 }
@@ -305,7 +308,7 @@
     justify-content: center;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     position: relative;
     margin-left: 2px;
     opacity: 0.6;
@@ -344,7 +347,7 @@
     transform: translateY(-6px) scale(0.95);
     transform-origin: top right;
     pointer-events: none;
-    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 2147483647;
 }
 .disable-menu.open {
@@ -383,7 +386,7 @@
     border-radius: var(--radius-sm);
     font-size: 11px;
     font-family: var(--font-family);
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     white-space: nowrap;
 }
 .disable-menu .disable-item:hover {
@@ -419,7 +422,7 @@
     transform: translateY(-8px) scale(0.95);
     transform-origin: top right;
     pointer-events: none;
-    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 2147483647;
 }
 /* Flipped upward when near bottom of viewport */
@@ -465,7 +468,7 @@
     border-radius: var(--radius-sm);
     font-size: 11px;
     font-family: var(--font-family);
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     white-space: nowrap;
 }
 
@@ -498,7 +501,7 @@
     justify-content: center;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     margin-left: auto;
     opacity: 0.4;
     padding: 0;
@@ -602,7 +605,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
 }
 .close-btn:hover { background: var(--bg-hover); color: var(--text-primary); transform: scale(1.1); }
 .close-btn svg { width: 14px; height: 14px; }
@@ -668,7 +671,7 @@
     font-size: 11px;
     font-weight: 500;
     font-family: var(--font-family);
-    transition: all var(--transition-fast);
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter var(--transition-fast);
     letter-spacing: 0.02em;
 }
 
@@ -698,9 +701,10 @@
 
 /* ===== Spell Check Animations (popup only) ===== */
 @keyframes suggestionSlideIn {
-    0% { opacity: 0; transform: translateY(8px) scale(0.96); filter: blur(4px); }
-    40% { opacity: 0.6; filter: blur(1px); }
-    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+    /* Removed 'filter: blur(...)' — see note above about compositor cost. */
+    0% { opacity: 0; transform: translateY(8px) scale(0.96); }
+    40% { opacity: 0.6; }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes correctedPulse {
@@ -780,7 +784,7 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-sm);
-    transition: all 0.2s ease;
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s ease;
     opacity: 0.5;
 }
 .suggestion-close:hover {
@@ -853,7 +857,7 @@
     font-weight: 600;
     font-family: var(--font-family);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s ease;
     letter-spacing: 0.01em;
 }
 .suggestion-btn.dismiss {
@@ -907,7 +911,7 @@
     background: linear-gradient(135deg, var(--accent-primary), #00d4aa);
     color: var(--bg-surface);
     box-shadow: 0 2px 10px var(--accent-glow, var(--accent-glow));
-    transition: all 0.2s ease;
+    transition: background-color, color, border-color, box-shadow, opacity, transform, filter 0.2s ease;
 }
 .suggestion-btn.fix-all svg {
     fill: none;
@@ -920,6 +924,71 @@
 }
 .suggestion-btn.fix-all:active {
     transform: scale(0.97);
+}
+
+/* ===== Highlight Tooltip (now lives inside shadow root) ===== */
+.viky-highlight-tooltip {
+    position: fixed;
+    background: #0f172a !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 4px !important;
+    padding: 6px 10px !important;
+    display: none;
+    align-items: center !important;
+    gap: 8px !important;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
+    z-index: 2147483647 !important;
+    pointer-events: auto !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    color: #f1f5f9 !important;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.viky-highlight-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.viky-highlight-tooltip-btn {
+    background: transparent !important;
+    border: none !important;
+    color: #f87171 !important;
+    cursor: pointer !important;
+    padding: 2px 4px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+    font-family: inherit !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    transition: opacity 0.2s !important;
+}
+.viky-highlight-tooltip-btn:hover {
+    opacity: 0.8 !important;
+}
+.viky-highlight-tooltip-divider {
+    width: 1px !important;
+    height: 12px !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+}
+.viky-highlight-tooltip-logo {
+    display: flex !important;
+    align-items: center !important;
+    color: #00ff9d !important;
+}
+
+/* ===== Reduced motion: honor OS-level accessibility setting ===== */
+/* Prevents vestibular discomfort for users who set "Reduce motion" in their OS.
+   Also reduces battery drain on laptops since animations are paused. */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+    }
 }
     `;
 
@@ -943,6 +1012,81 @@
     let currentHighlightColor = '#facc15';
     let highlightTooltip = null;
     let tooltipAutoHideTimer = null;
+
+    // ===== placeOverlay: single coordinate helper =====
+    // Consolidates the 7+ different position-calculation blocks scattered through this file.
+    // Each one independently computed `rect.top + scrollY` (or didn't, with bugs — see P1 fix
+    // notes). This helper is the single source of truth: pass in the rect, the desired mode,
+    // and an optional offset, and it returns the correct {top, left} for the element's style.
+    //
+    // @param el       — the element to position (must already be in the DOM with its style.position set)
+    // @param rect     — the getBoundingClientRect() of the anchor element (or null for viewport-centered)
+    // @param mode     — one of:
+    //                     'fixed-above'   : element is position:fixed, place above the anchor rect
+    //                     'fixed-below'   : element is position:fixed, place below the anchor rect
+    //                     'fixed-at'      : element is position:fixed, place at the anchor rect's top-left
+    //                     'fixed-center'  : element is position:fixed, place centered horizontally at top of rect
+    // @param options  — { offsetX: 0, offsetY: 0, center: false (center horizontally on anchor) }
+    function placeOverlay(el, rect, mode, options) {
+        if (!el) return;
+        options = options || {};
+        const offsetX = options.offsetX || 0;
+        const offsetY = options.offsetY || 0;
+
+        // For position: fixed elements, getBoundingClientRect() returns viewport-relative coords.
+        // DO NOT add window.scrollY/scrollX — that double-counts scroll position and pushes
+        // the element off-screen on any scrolled page. (This was the bug in the original code.)
+        const elWidth = el.offsetWidth;
+        const elHeight = el.offsetHeight;
+        let top = 0, left = 0;
+
+        switch (mode) {
+            case 'fixed-above':
+                top = rect.top - elHeight - 8;
+                left = options.center
+                    ? rect.left + (rect.width / 2) - (elWidth / 2)
+                    : rect.left;
+                break;
+            case 'fixed-below':
+                top = rect.bottom + 8;
+                left = options.center
+                    ? rect.left + (rect.width / 2) - (elWidth / 2)
+                    : rect.left;
+                break;
+            case 'fixed-at':
+                top = rect.top;
+                left = rect.left;
+                break;
+            case 'fixed-center':
+                // Center horizontally on viewport, at top of rect
+                left = (window.innerWidth / 2) - (elWidth / 2);
+                top = rect ? rect.top : (window.innerHeight / 2) - (elHeight / 2);
+                break;
+            default:
+                console.warn('[Viky AI] placeOverlay: unknown mode', mode);
+                return;
+        }
+
+        // Clamp to viewport so the element never goes off-screen
+        const margin = 8;
+        if (left < margin) left = margin;
+        if (left + elWidth > window.innerWidth - margin) {
+            left = window.innerWidth - margin - elWidth;
+        }
+        if (top < margin) top = margin;
+        if (top + elHeight > window.innerHeight - margin) {
+            // If it doesn't fit below, try flipping to above the rect
+            if (mode === 'fixed-below' && rect) {
+                top = rect.top - elHeight - 8;
+                if (top < margin) top = margin;
+            } else {
+                top = window.innerHeight - margin - elHeight;
+            }
+        }
+
+        el.style.top = `${top + offsetY}px`;
+        el.style.left = `${left + offsetX}px`;
+    }
 
     // ===== Action Configurations =====
     const ACTION_ICONS = {
@@ -1095,6 +1239,19 @@
 
         document.addEventListener('mouseup', handleSelection);
         document.addEventListener('mousedown', handleOutsideClick);
+
+        // Listen for the `select` event — fires when the user selects text inside an
+        // <input> or <textarea>. `mouseup` alone doesn't catch keyboard-driven selections
+        // (Shift+arrow keys, Ctrl+A) or programmatic selections.
+        document.addEventListener('select', (e) => {
+            const target = e.target;
+            if (!target) return;
+            const tag = target.tagName ? target.tagName.toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea') {
+                // Reuse handleSelection's logic — it already checks getInputSelection()
+                handleSelection({ composedPath: () => [target] });
+            }
+        }, true); // capture phase — `select` events don't bubble
 
         // Delegated mouse hover listeners for highlights in main page DOM
         document.addEventListener('mouseover', (e) => {
@@ -1608,25 +1765,117 @@
     }
 
     // ===== Event Handlers =====
+    // ===== Selection-aware event layer =====
+    // Computes a bounding rect for the selected text inside an <input> or <textarea>.
+    // window.getSelection() does NOT return text inside form fields — we have to use
+    // activeElement.selectionStart/End and a mirror-div technique to measure the pixel rect.
+    // (The spellchecker at spellcheck.js:122-156 has the same technique — keep them in sync.)
+    function getInputSelectionRect(el) {
+        if (!el || typeof el.selectionStart !== 'number' || typeof el.selectionEnd !== 'number') return null;
+        if (el.selectionStart === el.selectionEnd) return null;
+
+        try {
+            const computed = window.getComputedStyle(el);
+            const mirror = document.createElement('div');
+            const props = [
+                'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'letterSpacing',
+                'wordSpacing', 'lineHeight', 'textTransform', 'paddingTop', 'paddingRight',
+                'paddingBottom', 'paddingLeft', 'borderTopWidth', 'borderRightWidth',
+                'borderBottomWidth', 'borderLeftWidth', 'boxSizing', 'width',
+                'whiteSpace', 'wordWrap', 'overflowWrap', 'textIndent', 'direction', 'textAlign'
+            ];
+            mirror.style.cssText = 'position: absolute; visibility: hidden; overflow: hidden; white-space: pre-wrap; word-wrap: break-word;';
+            props.forEach(p => { mirror.style[p] = computed[p]; });
+            mirror.style.width = computed.width;
+
+            const text = el.value;
+            mirror.appendChild(document.createTextNode(text.substring(0, el.selectionStart)));
+            const selSpan = document.createElement('span');
+            selSpan.textContent = text.substring(el.selectionStart, el.selectionEnd);
+            mirror.appendChild(selSpan);
+            mirror.appendChild(document.createTextNode(text.substring(el.selectionEnd)));
+            document.body.appendChild(mirror);
+
+            const selRect = selSpan.getBoundingClientRect();
+            const mirrorRect = mirror.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            document.body.removeChild(mirror);
+
+            return {
+                left:   selRect.left - mirrorRect.left + elRect.left - el.scrollLeft,
+                top:    selRect.top  - mirrorRect.top  + elRect.top  - el.scrollTop,
+                right:  selRect.left - mirrorRect.left + elRect.left - el.scrollLeft + selRect.width,
+                bottom: selRect.top  - mirrorRect.top  + elRect.top  - el.scrollTop + selRect.height,
+                width:  selRect.width,
+                height: selRect.height
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    // Returns the selected text + rect for an input/textarea, or null if not applicable.
+    function getInputSelection() {
+        const el = document.activeElement;
+        if (!el) return null;
+        const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        if (tag !== 'input' && tag !== 'textarea') return null;
+        // Skip inputs that don't have selectable text
+        if (el.type && ['button', 'checkbox', 'radio', 'submit', 'reset', 'hidden', 'image', 'file'].includes(el.type.toLowerCase())) return null;
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        if (typeof start !== 'number' || typeof end !== 'number' || start === end) return null;
+        const text = el.value.substring(start, end);
+        if (!text.trim()) return null;
+        const rect = getInputSelectionRect(el);
+        if (!rect) return null;
+        return { text, rect };
+    }
+
     function handleSelection(e) {
-        if (e.composedPath().includes(hostElement)) return;
+        if (e && e.composedPath && e.composedPath().includes(hostElement)) return;
 
         setTimeout(() => {
+            // Path A: standard selection (window.getSelection) — works for normal page text + contenteditable
             const selection = window.getSelection();
-            const text = selection.toString().trim();
+            const text = selection ? selection.toString().trim() : '';
 
+            // Path B: input/textarea selection (uses activeElement.selectionStart/End)
+            // This is the missing piece — without it, "Improve / Fix grammar / Continue writing"
+            // never appear when you select text inside a textarea (which is exactly where
+            // they're most useful).
+            const inputSel = getInputSelection();
+
+            // Prefer Path A if it has text; otherwise fall back to Path B
             if (text.length > 0 && showFloatingButton) {
                 selectedText = text;
-                selectionRange = selection.getRangeAt(0).cloneRange();
-                
-                // Dynamically detect context (reading vs writing)
+                if (selection.rangeCount > 0) {
+                    selectionRange = selection.getRangeAt(0).cloneRange();
+                } else {
+                    selectionRange = null;
+                }
                 currentContext = getSelectionContext();
-                
-                // Re-render toolbar for active context before showing UI
                 if (floatingContainer && floatingContainer._renderForContext) {
                     floatingContainer._renderForContext(currentContext);
                 }
-                
+                showFloatingUI(selectionRange);
+            } else if (inputSel && showFloatingButton) {
+                // We have a selection inside an input/textarea — synthesize a fake "range"
+                // that showFloatingUI can use. We can't make a real Range (input/textarea text
+                // isn't in the DOM), but we can pass a { getBoundingClientRect() } stub.
+                selectedText = inputSel.text;
+                selectionRange = {
+                    _isInputStub: true,
+                    _inputEl: document.activeElement,
+                    _rect: inputSel.rect,
+                    getBoundingClientRect() { return this._rect; },
+                    cloneRange() { return this; },
+                    collapse() { /* no-op for our purposes */ }
+                };
+                currentContext = 'writing'; // input/textarea selections are always "writing"
+                if (floatingContainer && floatingContainer._renderForContext) {
+                    floatingContainer._renderForContext(currentContext);
+                }
                 showFloatingUI(selectionRange);
             }
         }, 10);
@@ -2075,13 +2324,16 @@
         const feedback = document.createElement('div');
         feedback.className = 'copy-feedback';
         feedback.textContent = 'Copied!';
-        document.body.appendChild(feedback);
+        // Append to shadow root so it picks up the fadeOut keyframes (defined in shadow root)
+        // instead of document.body where host-page CSP/stylesheet would clobber the animation.
+        const container = shadowRoot.querySelector('.theme-wrapper') || shadowRoot;
+        container.appendChild(feedback);
 
         const rect = floatingContainer.getBoundingClientRect();
+        // Use the single placeOverlay helper — element is position:fixed, placed above the bubble.
+        // The helper handles viewport clamping and avoids the double-count-scroll bug.
         feedback.style.cssText = `
             position: fixed;
-            top: ${rect.top + window.scrollY}px;
-            left: ${rect.left + window.scrollX}px;
             transform: translateY(-100%);
             background: #10b981;
             color: white;
@@ -2092,7 +2344,10 @@
             z-index: 2147483647;
             animation: fadeOut 1s ease forwards;
             animation-delay: 1s;
+            pointer-events: none;
         `;
+        // Place above the floating container, horizontally centered on it
+        placeOverlay(feedback, rect, 'fixed-above', { center: true });
 
         setTimeout(() => feedback.remove(), 2000);
     }
@@ -2101,13 +2356,11 @@
         const feedback = document.createElement('div');
         feedback.className = 'viky-select-text-feedback';
         feedback.textContent = 'Select some text on the page first';
-        document.body.appendChild(feedback);
+        const container = shadowRoot.querySelector('.theme-wrapper') || shadowRoot;
+        container.appendChild(feedback);
 
         feedback.style.cssText = [
             'position: fixed',
-            'bottom: 24px',
-            'left: 50%',
-            'transform: translateX(-50%)',
             'background: var(--accent-primary, #00ff9d)',
             'color: var(--bg-surface, #121214)',
             'padding: 10px 16px',
@@ -2118,8 +2371,15 @@
             'box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 18px var(--accent-glow, var(--accent-glow))',
             'z-index: 2147483647',
             'animation: fadeOut 1s ease forwards',
-            'animation-delay: 1.6s'
+            'animation-delay: 1.6s',
+            'pointer-events: none'
         ].join(';');
+        // Centered at the bottom of the viewport
+        placeOverlay(feedback, null, 'fixed-center');
+        feedback.style.bottom = '24px';
+        feedback.style.top = 'auto';
+        feedback.style.transform = 'translateX(-50%)';
+        feedback.style.left = '50%';
 
         setTimeout(() => feedback.remove(), 2800);
     }
@@ -2128,13 +2388,12 @@
         const feedback = document.createElement('div');
         feedback.className = 'highlight-feedback';
         feedback.textContent = 'Highlighted!';
-        document.body.appendChild(feedback);
+        const container = shadowRoot.querySelector('.theme-wrapper') || shadowRoot;
+        container.appendChild(feedback);
 
         const rect = floatingContainer.getBoundingClientRect();
         feedback.style.cssText = `
             position: fixed;
-            top: ${rect.top + window.scrollY}px;
-            left: ${rect.left + window.scrollX}px;
             transform: translateY(-100%);
             background: var(--accent-primary, #e67e22);
             color: white;
@@ -2145,7 +2404,9 @@
             z-index: 2147483647;
             animation: fadeOut 1s ease forwards;
             animation-delay: 1s;
+            pointer-events: none;
         `;
+        placeOverlay(feedback, rect, 'fixed-above', { center: true });
 
         setTimeout(() => feedback.remove(), 2000);
     }
@@ -2186,7 +2447,12 @@
             </button>
         `;
 
-        document.body.appendChild(highlightTooltip);
+        // Append to shadow root so the tooltip's CSS (defined in mainStyle lives in document.head,
+        // but the tooltip's class is also defined in VIKY_CSS in shadow root) and any animations
+        // are isolated from host-page overrides. position: fixed elements inside a shadow root
+        // still render correctly over host content.
+        const container = shadowRoot.querySelector('.theme-wrapper') || shadowRoot;
+        container.appendChild(highlightTooltip);
 
         highlightTooltip.addEventListener('mouseenter', () => {
             clearTimeout(tooltipAutoHideTimer);
@@ -2212,24 +2478,18 @@
         tooltip.activeHighlight = highlightEl;
 
         const rect = highlightEl.getBoundingClientRect();
-        const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
 
+        // Need the tooltip to be visible briefly to measure its dimensions,
+        // then place it via the helper, then animate in.
         tooltip.style.display = 'flex';
         tooltip.style.visibility = 'hidden';
         tooltip.style.opacity = '0';
-        
-        const tooltipWidth = tooltip.offsetWidth;
-        const tooltipHeight = tooltip.offsetHeight;
-        
+
+        // Force layout so offsetWidth/Height are correct
+        // (no need to read them explicitly — placeOverlay does that internally)
+
         tooltip.style.visibility = '';
-        
-        const top = rect.top + scrollTop - tooltipHeight - 8;
-        const left = rect.left + scrollLeft + (rect.width / 2) - (tooltipWidth / 2);
-
-        tooltip.style.top = `${top}px`;
-        tooltip.style.left = `${left}px`;
-
+        placeOverlay(tooltip, rect, 'fixed-above', { center: true });
         tooltip.classList.add('visible');
     }
 
@@ -2255,6 +2515,10 @@
                 parent.insertBefore(highlightEl.firstChild, highlightEl);
             }
             parent.removeChild(highlightEl);
+            // Merge adjacent text nodes — without this, repeated highlight/remove cycles
+            // fragment the DOM with thousands of split text nodes, slowing TreeWalker
+            // traversals and breaking the browser's native text selection in subtle ways.
+            parent.normalize();
         } else {
             highlightEl.style.backgroundColor = '';
             highlightEl.classList.remove('viky-highlight-mark');
@@ -2326,6 +2590,40 @@
         // No range saved — just copy to clipboard
         if (!selectionRange) {
             showCopiedFallback();
+            return;
+        }
+
+        // ===== Input/textarea path (synthesized stub range) =====
+        // When the user selected text inside an <input> or <textarea>, selectionRange is
+        // our synthetic stub object (see handleSelection). Real DOM range operations like
+        // commonAncestorContainer / deleteContents don't apply — we use setSelectionRange
+        // + document.execCommand('insertText') instead.
+        if (selectionRange._isInputStub) {
+            const el = selectionRange._inputEl;
+            if (!el || el.disabled || el.readOnly) {
+                showCopiedFallback();
+                return;
+            }
+            try {
+                const start = el.selectionStart;
+                const end = el.selectionEnd;
+                // Replace the selected region with the new text
+                el.focus();
+                el.setSelectionRange(start, end);
+                const ok = document.execCommand('insertText', false, newText);
+                if (!ok) {
+                    // execCommand can return false on some browsers — manual fallback
+                    el.value = el.value.substring(0, start) + newText + el.value.substring(end);
+                    el.setSelectionRange(start + newText.length, start + newText.length);
+                }
+                // Dispatch input event so frameworks (React, Vue) pick up the change
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch (err) {
+                console.error('[Viky AI] input/textarea replace failed:', err);
+                showCopiedFallback();
+                return;
+            }
+            hideResultPanel();
             return;
         }
 
@@ -2426,6 +2724,8 @@
         const header = el.querySelector('.panel-header');
         let isDragging = false;
         let startX, startY, initialLeft, initialTop;
+        let moveHandler = null;
+        let upHandler = null;
 
         header.addEventListener('mousedown', (e) => {
             if (e.target.closest('button')) return;
@@ -2433,22 +2733,32 @@
             isDragging = true;
             startX = e.clientX;
             startY = e.clientY;
-            const rect = el.getBoundingClientRect();
-            initialLeft = rect.left;
-            initialTop = rect.top;
+            // The panel is position: absolute (document-relative). Its current style.left/top
+            // already include scroll offsets (set in showResultPanel). Reading getBoundingClientRect
+            // gives viewport coords (no scroll), which would cause a jump on the first mousemove
+            // when the page is scrolled. Read the actual style values instead.
+            const cs = getComputedStyle(el);
+            initialLeft = parseFloat(cs.left) || 0;
+            initialTop = parseFloat(cs.top) || 0;
             header.style.cursor = 'grabbing';
             e.preventDefault();
-        });
 
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            el.style.left = `${initialLeft + (e.clientX - startX)}px`;
-            el.style.top = `${initialTop + (e.clientY - startY)}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            isDragging = false;
-            header.style.cursor = 'grab';
+            // Attach move/up ONLY during drag (not permanently on document) to avoid wasted CPU.
+            moveHandler = (ev) => {
+                if (!isDragging) return;
+                el.style.left = `${initialLeft + (ev.clientX - startX)}px`;
+                el.style.top = `${initialTop + (ev.clientY - startY)}px`;
+            };
+            upHandler = () => {
+                isDragging = false;
+                header.style.cursor = 'grab';
+                document.removeEventListener('mousemove', moveHandler);
+                document.removeEventListener('mouseup', upHandler);
+                moveHandler = null;
+                upHandler = null;
+            };
+            document.addEventListener('mousemove', moveHandler);
+            document.addEventListener('mouseup', upHandler);
         });
     }
 

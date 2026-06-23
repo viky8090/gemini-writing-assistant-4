@@ -2,14 +2,12 @@
 importScripts('config.js');
 
 // ===== State & Cache =====
-const STATE = {
-    chatHistory: []
-};
-
-// Simple in-memory prompt cache (key: hash, value: {text, timestamp})
+// In-memory cache for hot reads (writes through to chrome.storage.session so it survives SW restarts).
+// SW dies after 30s idle — anything purely in-memory is effectively useless for repeat queries.
 const promptCache = new Map();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const CACHE_MAX_SIZE = 50;
+const SCHEMA_VERSION = 1;
 
 // System instruction prepended to all text analysis prompts
 const SYSTEM_RULE = "IMPORTANT: Return ONLY the rewritten/transformed text. No explanations, no preamble, no quotes, no markdown formatting. Output the result directly. You MUST preserve the exact paragraph breaks, structure, line breaks, and spacing of the original text.";
@@ -19,6 +17,55 @@ const SYSTEM_RULE = "IMPORTANT: Return ONLY the rewritten/transformed text. No e
 // sub-50ms cold starts and AI Gateway caching. Audio transcription
 // also routes through the Worker using multimodal models.
 const WORKER_PROXY_URL = 'https://viky-ai-proxy.vikranty301.workers.dev';
+
+// ===== Free-model fallback list (loaded lazily from free_models.json) =====
+// Used when the selected model returns 429/5xx — we retry with the next free model.
+let freeModelList = null;
+let freeModelLoadPromise = null;
+
+async function loadFreeModels() {
+    if (freeModelList) return freeModelList;
+    if (freeModelLoadPromise) return freeModelLoadPromise;
+    freeModelLoadPromise = (async () => {
+        try {
+            const url = chrome.runtime.getURL('free_models.json');
+            const res = await fetch(url);
+            const list = await res.json();
+            freeModelList = Array.isArray(list) ? list : [];
+            console.log('[Viky AI] Loaded', freeModelList.length, 'free models for fallback chain');
+            return freeModelList;
+        } catch (e) {
+            console.warn('[Viky AI] Failed to load free_models.json — fallback disabled:', e.message);
+            freeModelList = [];
+            return freeModelList;
+        } finally {
+            freeModelLoadPromise = null;
+        }
+    })();
+    return freeModelLoadPromise;
+}
+
+// Pick the next model to try after a failure.
+// Heuristic: prefer models that are NOT the one that just failed, and prefer
+// smaller/faster models first (lower cost, faster response).
+function pickFallbackModel(failedModel) {
+    if (!freeModelList || freeModelList.length === 0) return null;
+    // Prefer the "auto-route" model first if available — let OpenRouter pick.
+    const autoRoute = freeModelList.find(m => m === 'openrouter/free');
+    if (autoRoute && autoRoute !== failedModel) return autoRoute;
+    // Then try stable, well-known models.
+    const preferred = [
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'meta-llama/llama-3.2-3b-instruct:free',
+        'google/gemma-4-26b-a4b-it:free',
+        'qwen/qwen3-next-80b-a3b-instruct:free'
+    ];
+    for (const m of preferred) {
+        if (m !== failedModel && freeModelList.includes(m)) return m;
+    }
+    // Otherwise, just pick the next one in the list that isn't the failed model.
+    return freeModelList.find(m => m !== failedModel) || null;
+}
 
 // ===== Hash helper for cache keys =====
 function djb2Hash(str) {
@@ -35,6 +82,8 @@ function getCachedResponse(prompt) {
     if (!entry) return null;
     if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
         promptCache.delete(key);
+        // Also remove from session storage
+        try { chrome.storage.session.remove(['cache_' + key]); } catch (e) {}
         return null;
     }
     return entry.text;
@@ -45,22 +94,78 @@ function setCachedResponse(prompt, text) {
     if (promptCache.size >= CACHE_MAX_SIZE) {
         const firstKey = promptCache.keys().next().value;
         promptCache.delete(firstKey);
+        try { chrome.storage.session.remove(['cache_' + firstKey]); } catch (e) {}
     }
-    promptCache.set(key, { text, timestamp: Date.now() });
+    const entry = { text, timestamp: Date.now() };
+    promptCache.set(key, entry);
+    // Persist to session storage so it survives SW restarts
+    try {
+        const obj = {};
+        obj['cache_' + key] = entry;
+        chrome.storage.session.set(obj);
+    } catch (e) {}
+}
+
+// Restore session-cached prompts on SW startup
+async function restoreSessionCache() {
+    try {
+        const all = await chrome.storage.session.get(null);
+        for (const k in all) {
+            if (k.startsWith('cache_')) {
+                const key = k.slice(6);
+                const entry = all[k];
+                if (entry && Date.now() - entry.timestamp <= CACHE_TTL_MS) {
+                    promptCache.set(key, entry);
+                } else {
+                    chrome.storage.session.remove([k]);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[Viky AI] Failed to restore session cache:', e.message);
+    }
 }
 
 // ===== Streaming Port Handler =====
 chrome.runtime.onConnect.addListener((port) => {
     if (port.name !== 'viky-stream') return;
 
+    let aborted = false;
+    let activeAbortController = null;
+    let heartbeatInterval = null;
+
+    // When the side panel closes mid-stream, abort the upstream fetch and stop the heartbeat.
+    // Without this, the SW keeps fetching after the port is dead, wasting bandwidth and SW lifetime.
+    port.onDisconnect.addListener(() => {
+        aborted = true;
+        if (activeAbortController) {
+            try { activeAbortController.abort(); } catch (e) {}
+            activeAbortController = null;
+        }
+        if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+        }
+    });
+
     port.onMessage.addListener(async (request) => {
         const { action, message, history, text, type, targetLanguage, stream, model } = request;
 
         if (stream) {
             try {
-                await handleStreamingRequest(request, port);
+                await handleStreamingRequest(request, port, {
+                    getAborted: () => aborted,
+                    setAbortController: (ac) => { activeAbortController = ac; },
+                    setHeartbeat: (fn, ms) => {
+                        if (heartbeatInterval) clearInterval(heartbeatInterval);
+                        heartbeatInterval = setInterval(fn, ms);
+                    },
+                    clearHeartbeat: () => {
+                        if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+                    }
+                });
             } catch (err) {
-                port.postMessage({ error: err.message, done: true });
+                try { port.postMessage({ error: err.message, done: true }); } catch (e) {}
             }
         } else {
             // Fallback non-streaming
@@ -73,15 +178,23 @@ chrome.runtime.onConnect.addListener((port) => {
                 } else {
                     throw new Error('Unknown action for stream port');
                 }
-                port.postMessage({ chunk: responseText, done: true });
+                try { port.postMessage({ chunk: responseText, done: true }); } catch (e) {}
             } catch (err) {
-                port.postMessage({ error: err.message, done: true });
+                try { port.postMessage({ error: err.message, done: true }); } catch (e) {}
             }
         }
     });
 });
 
-async function handleStreamingRequest(request, port) {
+// Safe port.postMessage — never throws on disconnected port
+function safePostMessage(port, msg, ctx) {
+    if (ctx && ctx.getAborted && ctx.getAborted()) return;
+    try { port.postMessage(msg); } catch (e) {
+        // Port disconnected — caller's onDisconnect handler will clean up
+    }
+}
+
+async function handleStreamingRequest(request, port, ctx) {
     const { action, message, history, text, type, targetLanguage, model } = request;
 
     let promptText;
@@ -97,7 +210,7 @@ async function handleStreamingRequest(request, port) {
     const cached = getCachedResponse(promptText);
     if (cached) {
         // Send cached response in one chunk
-        port.postMessage({ chunk: cached, done: true });
+        safePostMessage(port, { chunk: cached, done: true }, ctx);
         return;
     }
 
@@ -113,22 +226,71 @@ async function handleStreamingRequest(request, port) {
         });
     });
 
-    const payload = {
-        prompt: promptText,
-        stream: true
-    };
-    if (model) {
-        payload.model = model;
+    // ===== Retry loop with free-model fallback =====
+    // Try the user's selected model first. On 429/5xx, retry with a different free model.
+    let currentModel = model;
+    const triedModels = new Set();
+    const MAX_RETRIES = 3;
+    let response, payload;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        if (ctx.getAborted && ctx.getAborted()) return;
+        triedModels.add(currentModel);
+
+        payload = { prompt: promptText, stream: true };
+        if (currentModel) payload.model = currentModel;
+
+        const ac = new AbortController();
+        if (ctx.setAbortController) ctx.setAbortController(ac);
+
+        // 60-second timeout — if upstream hangs, abort and treat as failure for retry
+        const timeoutId = setTimeout(() => ac.abort(), 60000);
+
+        try {
+            response = await fetch(FIREBASE_FUNCTION_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload),
+                signal: ac.signal
+            });
+            clearTimeout(timeoutId);
+
+            // Retry on 429 (rate limit) or 5xx (server error)
+            if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES - 1) {
+                console.warn(`[Viky AI] Model ${currentModel} returned ${response.status} — retrying with fallback`);
+                // Surface a transient "retrying" message to the user
+                safePostMessage(port, { chunk: `\n\n_[Retrying with a different model — ${response.status} from ${currentModel}]_\n`, done: false }, ctx);
+                const next = pickFallbackModel(currentModel);
+                if (next) {
+                    currentModel = next;
+                    // Drain the response body so the connection is released
+                    try { await response.body?.cancel(); } catch (e) {}
+                    continue;
+                }
+            }
+            break; // Success or final-attempt failure — proceed to parse
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError' && (ctx.getAborted && ctx.getAborted())) {
+                // User-initiated abort (side panel closed) — bail out silently
+                return;
+            }
+            if (attempt < MAX_RETRIES - 1) {
+                console.warn(`[Viky AI] Fetch failed (${err.message}) — retrying with fallback model`);
+                const next = pickFallbackModel(currentModel);
+                if (next) {
+                    currentModel = next;
+                    continue;
+                }
+            }
+            throw err;
+        }
     }
 
-    const response = await fetch(FIREBASE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-    });
+    if (!response) throw new Error('No response from server after retries');
 
     // Check if response is JSON (error) or SSE stream
     const contentType = response.headers.get('content-type') || '';
@@ -146,7 +308,7 @@ async function handleStreamingRequest(request, port) {
     if (contentType.includes('application/json')) {
         const data = await response.json();
         if (data.success && data.text) {
-            port.postMessage({ chunk: data.text, done: true });
+            safePostMessage(port, { chunk: data.text, done: true }, ctx);
             setCachedResponse(promptText, data.text);
         } else {
             throw new Error(data.error || 'Invalid response from server');
@@ -154,79 +316,93 @@ async function handleStreamingRequest(request, port) {
         return;
     }
 
-    // SSE stream parsing
+    // ===== SSE stream parsing =====
+    // Start a heartbeat so the SW doesn't die during long gaps in upstream output.
+    // Chrome kills an idle SW after 30s; sending an empty chunk every 25s counts as port activity.
+    if (ctx.setHeartbeat) {
+        ctx.setHeartbeat(() => {
+            safePostMessage(port, { chunk: '', done: false }, ctx);
+        }, 25000);
+    }
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let fullText = '';
 
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            if (ctx.getAborted && ctx.getAborted()) return;
+            const { done, value } = await reader.read();
+            if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop(); // keep incomplete line in buffer
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete line in buffer
 
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
 
-            const dataStr = trimmed.slice(5).trim();
-            if (dataStr === '[DONE]') {
-                port.postMessage({ done: true });
-                setCachedResponse(promptText, fullText);
-                return;
-            }
-
-            try {
-                const data = JSON.parse(dataStr);
-
-                // Check for error objects in stream
-                if (data.error) {
-                    throw new Error(data.error.message || data.error);
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr === '[DONE]') {
+                    if (ctx.clearHeartbeat) ctx.clearHeartbeat();
+                    safePostMessage(port, { done: true }, ctx);
+                    setCachedResponse(promptText, fullText);
+                    return;
                 }
 
-                // OpenRouter format: choices[0].delta.content
-                const chunkText = data.choices?.[0]?.delta?.content || data.text || '';
-                if (chunkText) {
-                    fullText += chunkText;
-                    port.postMessage({ chunk: chunkText, done: false });
-                }
-            } catch (e) {
-                // If it's a thrown error from above, re-throw it
-                if (e.message && e.message !== 'Unexpected token') {
-                    // Only re-throw real errors, not JSON parse errors
-                    if (!e.message.includes('Unexpected') && !e.message.includes('JSON')) {
-                        throw e;
-                    }
-                }
-            }
-        }
-    }
-
-    // Final buffer flush
-    if (buffer.trim()) {
-        const trimmed = buffer.trim();
-        if (trimmed.startsWith('data:')) {
-            const dataStr = trimmed.slice(5).trim();
-            if (dataStr !== '[DONE]') {
                 try {
                     const data = JSON.parse(dataStr);
+
+                    // Check for error objects in stream
+                    if (data.error) {
+                        if (ctx.clearHeartbeat) ctx.clearHeartbeat();
+                        throw new Error(data.error.message || data.error);
+                    }
+
+                    // OpenRouter format: choices[0].delta.content
                     const chunkText = data.choices?.[0]?.delta?.content || data.text || '';
                     if (chunkText) {
                         fullText += chunkText;
-                        port.postMessage({ chunk: chunkText, done: false });
+                        safePostMessage(port, { chunk: chunkText, done: false }, ctx);
                     }
                 } catch (e) {
-                    // Ignore parse errors on final buffer
+                    // Re-throw real errors (not JSON parse failures)
+                    if (e instanceof SyntaxError) continue;
+                    throw e;
                 }
             }
         }
-    }
 
-    port.postMessage({ done: true });
-    if (fullText) setCachedResponse(promptText, fullText);
+        // Final buffer flush
+        if (buffer.trim()) {
+            const trimmed = buffer.trim();
+            if (trimmed.startsWith('data:')) {
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr !== '[DONE]') {
+                    try {
+                        const data = JSON.parse(dataStr);
+                        const chunkText = data.choices?.[0]?.delta?.content || data.text || '';
+                        if (chunkText) {
+                            fullText += chunkText;
+                            safePostMessage(port, { chunk: chunkText, done: false }, ctx);
+                        }
+                    } catch (e) {
+                        // Ignore parse errors on final buffer
+                    }
+                }
+            }
+        }
+
+        if (ctx.clearHeartbeat) ctx.clearHeartbeat();
+        safePostMessage(port, { done: true }, ctx);
+        if (fullText) setCachedResponse(promptText, fullText);
+    } finally {
+        // Always release the reader and clear heartbeat
+        if (ctx.clearHeartbeat) ctx.clearHeartbeat();
+        try { reader.releaseLock(); } catch (e) {}
+    }
 }
 
 function buildChatPrompt(message, history) {
@@ -287,51 +463,63 @@ async function handleAnalyzeTextInternal(text, type, targetLanguage, model) {
     return result;
 }
 
-// ===== Legacy Message Listener (non-streaming fallback) =====
+// ===== Message Router =====
+// Wraps all onMessage handlers with try/catch, ensures `return true` for async responses,
+// checks `chrome.runtime.lastError` for sendMessage calls, and logs every message + duration.
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'ANALYZE_TEXT') {
-        handleAnalyzeText(request, sendResponse);
-        return true;
-    }
-
-    if (request.action === 'GENERATE_IMAGE') {
-        handleGenerateImage(request, sendResponse);
-        return true;
-    }
-
-    if (request.action === 'CHAT_MESSAGE') {
-        handleChatMessage(request, sendResponse);
-        return true;
-    }
-
-    if (request.action === 'TRANSLATE_TEXT') {
-        handleTranslateText(request, sendResponse);
-        return true;
-    }
-
-    if (request.action === 'TRANSCRIBE_AUDIO') {
-        handleTranscribeAudio(request, sendResponse);
-        return true;
-    }
-
-    if (request.action === 'OPEN_SIDEPANEL_WA_SETTINGS') {
-        // Open the sidepanel on the sender's tab, then navigate to WhatsApp settings
-        const tabId = sender.tab?.id;
-        if (tabId && chrome.sidePanel && chrome.sidePanel.open) {
-            chrome.sidePanel.open({ tabId }).then(() => {
-                // Small delay to let the sidepanel DOM load before sending navigation message
-                setTimeout(() => {
-                    chrome.runtime.sendMessage({ action: 'NAVIGATE_TO_WA_SETTINGS' });
-                }, 500);
-            }).catch(err => {
-                console.error('[Viky AI] Failed to open sidepanel:', err);
-            });
+    const startTs = Date.now();
+    const safeSend = (payload) => {
+        try { sendResponse(payload); } catch (e) {
+            console.warn('[Viky AI] sendResponse failed:', e.message);
         }
-        sendResponse({ success: true });
-        return true;
-    }
+    };
 
-    return false;
+    try {
+        if (request.action === 'ANALYZE_TEXT') {
+            handleAnalyzeText(request, safeSend);
+            return true; // async
+        }
+
+        if (request.action === 'GENERATE_IMAGE') {
+            handleGenerateImage(request, safeSend);
+            return true;
+        }
+
+        if (request.action === 'CHAT_MESSAGE') {
+            handleChatMessage(request, safeSend);
+            return true;
+        }
+
+        if (request.action === 'TRANSLATE_TEXT') {
+            handleTranslateText(request, safeSend);
+            return true;
+        }
+
+        if (request.action === 'TRANSCRIBE_AUDIO') {
+            handleTranscribeAudio(request, safeSend);
+            return true;
+        }
+
+        if (request.action === 'OPEN_SIDEPANEL_WA_SETTINGS') {
+            handleOpenSidepanelWaSettings(sender, safeSend);
+            return true;
+        }
+
+        // Unknown action — return false synchronously so the channel closes immediately
+        // (avoids the default 30s timeout)
+        safeSend({ success: false, error: 'Unknown action: ' + request.action });
+        return false;
+    } catch (err) {
+        console.error('[Viky AI] Message router error for', request.action, ':', err);
+        safeSend({ success: false, error: err.message });
+        return false;
+    } finally {
+        // Log message duration for debugging (only log slow ones to avoid spam)
+        const duration = Date.now() - startTs;
+        if (duration > 1000) {
+            console.log(`[Viky AI] Slow message: ${request.action} took ${duration}ms`);
+        }
+    }
 });
 
 // ===== WhatsApp Action Handlers =====
@@ -447,14 +635,32 @@ async function handleGenerateImage(request, sendResponse) {
             isImageGeneration: true
         };
 
+        const ac = new AbortController();
+        const timeoutId = setTimeout(() => ac.abort(), 45000); // 45s timeout for image gen
+
         const response = await fetch(IMAGE_GEN_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: ac.signal
+        }).catch(err => {
+            clearTimeout(timeoutId);
+            // If the paid image model fails with 402/403 (payment required / forbidden),
+            // fall back to the free pollinations.ai endpoint — host permission is already granted.
+            if (err.name === 'AbortError') throw new Error('Image generation timed out');
+            throw err;
         });
+        clearTimeout(timeoutId);
+
+        if (response.status === 402 || response.status === 403) {
+            console.warn('[Viky AI] Paid image model unavailable (' + response.status + ') — falling back to pollinations.ai');
+            const freeUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}`;
+            sendResponse({ success: true, data: freeUrl });
+            return;
+        }
 
         if (!response.ok) {
             let errorMessage = `HTTP Error: ${response.status}`;
@@ -482,11 +688,18 @@ async function handleGenerateImage(request, sendResponse) {
         }
     } catch (error) {
         console.error("Image Generation Error:", error);
-        sendResponse({ success: false, error: error.message });
+        // Final fallback: pollinations.ai (always works, free, no auth)
+        try {
+            const enhancedPrompt = `Generate an image: ${prompt}. Style: ${style || 'natural, photorealistic'}`;
+            const freeUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}`;
+            sendResponse({ success: true, data: freeUrl });
+        } catch (fallbackErr) {
+            sendResponse({ success: false, error: error.message });
+        }
     }
 }
 
-// ===== OpenRouter API Call (Via Firebase Proxy) =====
+// ===== OpenRouter API Call (Via Firebase Proxy) — with retry/fallback for non-streaming =====
 async function callGemini(promptText, model) {
     const FIREBASE_FUNCTION_URL = `${WORKER_PROXY_URL}/analyzeText`;
 
@@ -500,62 +713,103 @@ async function callGemini(promptText, model) {
         });
     });
 
-    const payload = { prompt: promptText };
-    if (model) {
-        payload.model = model;
-    }
+    let currentModel = model;
+    const MAX_RETRIES = 3;
 
-    const response = await fetch(FIREBASE_FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
-    });
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        const payload = { prompt: promptText };
+        if (currentModel) payload.model = currentModel;
 
-    if (!response.ok) {
-        let errorMessage = `HTTP Error: ${response.status}`;
+        const ac = new AbortController();
+        const timeoutId = setTimeout(() => ac.abort(), 30000);
+
         try {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
-        } catch (e) { }
-        throw new Error(errorMessage);
+            const response = await fetch(FIREBASE_FUNCTION_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(payload),
+                signal: ac.signal
+            });
+            clearTimeout(timeoutId);
+
+            if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES - 1) {
+                console.warn(`[Viky AI] callGemini: ${currentModel} returned ${response.status} — retrying with fallback`);
+                const next = pickFallbackModel(currentModel);
+                if (next) { currentModel = next; continue; }
+            }
+
+            if (!response.ok) {
+                let errorMessage = `HTTP Error: ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                } catch (e) { }
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            if (!data.success || !data.text) {
+                if (data.error) throw new Error(data.error);
+                throw new Error("Invalid response from Firebase function");
+            }
+            return data.text;
+        } catch (err) {
+            clearTimeout(timeoutId);
+            if (err.name === 'AbortError') {
+                if (attempt < MAX_RETRIES - 1) {
+                    console.warn('[Viky AI] callGemini timed out — retrying with fallback');
+                    const next = pickFallbackModel(currentModel);
+                    if (next) { currentModel = next; continue; }
+                }
+                throw new Error('Request timed out');
+            }
+            throw err;
+        }
     }
-
-    const data = await response.json();
-
-    if (!data.success || !data.text) {
-        if (data.error) throw new Error(data.error);
-        throw new Error("Invalid response from Firebase function");
-    }
-
-    return data.text;
+    throw new Error('All retries exhausted');
 }
 
 // ===== Context Menu Setup =====
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create({
-        id: 'viky-ai-menu',
-        title: 'Viky AI',
-        contexts: ['selection']
+    // Remove any existing menus first to avoid "duplicate id" errors on extension reload
+    chrome.contextMenus.removeAll(() => {
+        chrome.contextMenus.create({
+            id: 'viky-ai-menu',
+            title: 'Viky AI',
+            contexts: ['selection']
+        });
+
+        const menuItems = [
+            { id: 'improve', title: 'Improve Writing', parentId: 'viky-ai-menu' },
+            { id: 'fix-grammar', title: 'Fix Grammar', parentId: 'viky-ai-menu' },
+            { id: 'shorten', title: 'Shorten', parentId: 'viky-ai-menu' },
+            { id: 'expand', title: 'Expand', parentId: 'viky-ai-menu' },
+            { id: 'casual', title: 'Casual Tone', parentId: 'viky-ai-menu' },
+            { id: 'formal', title: 'Formal Tone', parentId: 'viky-ai-menu' }
+        ];
+
+        menuItems.forEach(item => {
+            try { chrome.contextMenus.create(item); } catch (e) {
+                console.warn('[Viky AI] contextMenu create failed:', e.message);
+            }
+        });
     });
 
-    const menuItems = [
-        { id: 'improve', title: 'Improve Writing', parentId: 'viky-ai-menu' },
-        { id: 'fix-grammar', title: 'Fix Grammar', parentId: 'viky-ai-menu' },
-        { id: 'shorten', title: 'Shorten', parentId: 'viky-ai-menu' },
-        { id: 'expand', title: 'Expand', parentId: 'viky-ai-menu' },
-        { id: 'casual', title: 'Casual Tone', parentId: 'viky-ai-menu' },
-        { id: 'formal', title: 'Formal Tone', parentId: 'viky-ai-menu' }
-    ];
-
-    menuItems.forEach(item => {
-        chrome.contextMenus.create(item);
+    // Seed schema version on first install
+    chrome.storage.local.get(['schemaVersion'], (result) => {
+        if (result.schemaVersion === undefined) {
+            chrome.storage.local.set({ schemaVersion: SCHEMA_VERSION });
+        }
     });
+
+    // Pre-load free models list so the fallback chain is ready before the first request
+    loadFreeModels();
 });
 
-// Handle context menu clicks
+// Handle context menu clicks — with error handling for tabs without content scripts
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (!info.selectionText) return;
 
@@ -571,6 +825,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const action = actionMap[info.menuItemId];
     if (!action) return;
 
+    if (!tab || !tab.id) {
+        console.warn('[Viky AI] Context menu: no tab to message');
+        return;
+    }
+
     try {
         await chrome.tabs.sendMessage(tab.id, {
             action: 'CONTEXT_MENU_ANALYZE',
@@ -578,7 +837,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
             type: action
         });
     } catch (error) {
-        console.error("Context menu error:", error);
+        // Common on chrome:// pages, Web Store, devtools, PDF viewer where content scripts don't run
+        console.warn('[Viky AI] Could not deliver context-menu action to tab', tab.id, '—', error.message);
+        // Optionally: try to inject the content script on-demand via chrome.scripting.executeScript here
     }
 });
 
@@ -587,3 +848,42 @@ if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
     chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
         .catch((error) => console.error("Error setting side panel behavior:", error));
 }
+
+// ===== Browser startup handler — pre-warm caches =====
+chrome.runtime.onStartup.addListener(() => {
+    console.log('[Viky AI] Browser startup — restoring session cache');
+    restoreSessionCache();
+    loadFreeModels();
+});
+
+// Also restore session cache on SW startup (covers install/reload cases that onStartup doesn't fire for)
+restoreSessionCache();
+
+// ===== Handler: open side panel to WhatsApp settings =====
+function handleOpenSidepanelWaSettings(sender, sendResponse) {
+    const tabId = sender.tab?.id;
+    if (tabId && chrome.sidePanel && chrome.sidePanel.open) {
+        chrome.sidePanel.open({ tabId }).then(() => {
+            // Small delay to let the sidepanel DOM load before sending navigation message.
+            // We retry the NAVIGATE message on failure for up to 5 attempts — the original
+            // single-shot 500ms timeout would silently fail if the side panel hadn't registered
+            // its listener yet.
+            let attempts = 0;
+            const tryNavigate = () => {
+                attempts++;
+                chrome.runtime.sendMessage({ action: 'NAVIGATE_TO_WA_SETTINGS' }, (resp) => {
+                    if (chrome.runtime.lastError || !resp) {
+                        if (attempts < 5) {
+                            setTimeout(tryNavigate, 300);
+                        }
+                    }
+                });
+            };
+            setTimeout(tryNavigate, 500);
+        }).catch(err => {
+            console.error('[Viky AI] Failed to open sidepanel:', err);
+        });
+    }
+    sendResponse({ success: true });
+}
+
