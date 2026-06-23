@@ -420,6 +420,9 @@ function buildChatPrompt(message, history) {
 }
 
 function buildAnalyzePrompt(text, type, targetLanguage) {
+    if (type === 'RAW_PROMPT') {
+        return text;
+    }
     let task = '';
     switch (type) {
         case 'IMPROVE': task = 'Improve the clarity, flow, and quality of this text'; break;

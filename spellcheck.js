@@ -14,7 +14,10 @@
     let activeElement = null;
     let currentErrors = [];
     let debounceTimer = null;
+    let aiDebounceTimer = null;
     let textCache = new Map();
+    let aiCache = new Map();
+    let dismissedWords = new Set();
     let activeOverlays = [];
     let popupVisible = false;
     let isApplyingCorrection = false;
@@ -89,6 +92,12 @@
     function createOverlayContainer(sr) {
         const wrapper = sr.querySelector('.theme-wrapper');
         const parent = wrapper || sr;
+
+        // Clean up any existing containers to prevent duplicates (selection mismatch)
+        const oldOverlays = parent.querySelector('#viky-spellcheck-overlays');
+        if (oldOverlays) oldOverlays.remove();
+        const oldPopup = parent.querySelector('.viky-suggestion-popup');
+        if (oldPopup) oldPopup.remove();
 
         overlayContainer = document.createElement('div');
         overlayContainer.id = 'viky-spellcheck-overlays';
@@ -267,7 +276,7 @@
                 background: transparent;
             `;
 
-            const color = '#ef4444';
+            const color = error.type === 'grammar' ? '#3b82f6' : '#ef4444';
             const wavyLine = document.createElement('div');
             wavyLine.style.cssText = `
                 position: absolute;
@@ -302,8 +311,8 @@
     function showSuggestionPopup(error, rect, el, wordStart, wordEnd) {
         const scrollX = window.scrollX || document.documentElement.scrollLeft;
         const scrollY = window.scrollY || document.documentElement.scrollTop;
-        const typeLabel = 'Spelling';
-        const typeColor = '#ef4444';
+        const typeLabel = error.type === 'grammar' ? 'Grammar' : 'Spelling';
+        const typeColor = error.type === 'grammar' ? '#3b82f6' : '#ef4444';
         const errorCount = currentErrors.length;
 
         // Get suggestions from local engine
@@ -351,7 +360,7 @@
                 </button>
             </div>` : ''}
             <div class="suggestion-ai-analyze" style="padding: 6px 14px 10px; border-top: 1px solid var(--border-color); margin-top: 4px;">
-                <button class="suggestion-btn ai-proofread" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: rgba(0, 255, 157, 0.08); border: 1px solid rgba(0, 255, 157, 0.2); color: var(--accent-primary, #00ff9d);">
+                <button class="suggestion-btn ai-proofread" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--accent-primary, #00ff9d); border: none; color: var(--bg-surface, #121214); font-weight: 700; box-shadow: 0 2px 8px var(--accent-glow, rgba(0, 255, 157, 0.2));">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
                     </svg>
@@ -380,6 +389,9 @@
         // Dismiss
         suggestionPopup.querySelector('.suggestion-btn.dismiss').addEventListener('mousedown', (e) => {
             e.stopPropagation(); e.stopImmediatePropagation(); e.preventDefault();
+            if (error && error.word) {
+                dismissedWords.add(error.word.toLowerCase());
+            }
             const overlay = activeOverlays.find(u => u.dataset.errorIndex == currentErrors.indexOf(error).toString());
             if (overlay) overlay.remove();
             currentErrors = currentErrors.filter(err => err !== error);
@@ -704,6 +716,73 @@
         return false;
     }
 
+    function triggerAISpellCheck(el, text) {
+        if (!enabled || !el || isApplyingCorrection) return;
+        const cleanText = text.trim();
+        if (cleanText.length < MIN_TEXT_LENGTH) return;
+
+        const cacheKey = hashText(cleanText);
+        if (aiCache.has(cacheKey)) {
+            mergeAndRenderAIErrors(el, aiCache.get(cacheKey));
+            return;
+        }
+
+        chrome.runtime.sendMessage({
+            action: 'ANALYZE_TEXT',
+            text: `Analyze the following text for spelling and grammar errors. Return ONLY a JSON array of objects, where each object has "word" (the exact error string from the text) and "suggestion" (the corrected string). If there are no errors, return []. Do not include markdown formatting or explanations.\n\nText: "${cleanText}"`,
+            type: 'RAW_PROMPT',
+            model: 'meta-llama/llama-3.2-3b-instruct:free'
+        }, (response) => {
+            if (response && response.success && response.data) {
+                try {
+                    let jsonText = response.data.trim();
+                    if (jsonText.startsWith('```')) {
+                        jsonText = jsonText.replace(/^```json?/, '').replace(/```$/, '').trim();
+                    }
+                    const aiErrors = JSON.parse(jsonText);
+                    if (Array.isArray(aiErrors)) {
+                        aiCache.set(cacheKey, aiErrors);
+                        mergeAndRenderAIErrors(el, aiErrors);
+                    }
+                } catch (e) {
+                    console.warn('[Viky AI] Failed to parse AI spelling response:', e);
+                }
+            }
+        });
+    }
+
+    function mergeAndRenderAIErrors(el, aiErrors) {
+        if (activeElement !== el || isApplyingCorrection) return;
+
+        const text = getElementText(el);
+        // Start with current local errors (spelling type)
+        const updatedErrors = currentErrors.filter(err => err.type === 'spelling');
+
+        aiErrors.forEach(aiErr => {
+            if (!aiErr.word || !aiErr.suggestion) return;
+            const wordLower = aiErr.word.toLowerCase();
+            if (dismissedWords.has(wordLower)) return;
+
+            // Skip if this word already exists as an error
+            const alreadyExists = updatedErrors.some(e => e.word.toLowerCase() === wordLower);
+            if (alreadyExists) return;
+
+            // Find position in text
+            const pos = findWordPosition(el, aiErr.word, 0);
+            if (pos) {
+                updatedErrors.push({
+                    word: aiErr.word,
+                    index: pos.start,
+                    suggestion: aiErr.suggestion,
+                    type: 'grammar'
+                });
+            }
+        });
+
+        currentErrors = updatedErrors;
+        renderUnderlines(el, currentErrors);
+    }
+
     // ===== Local Spell Check (No API) =====
     async function triggerSpellCheck(el) {
         if (!enabled || !el || isApplyingCorrection) return;
@@ -731,6 +810,9 @@
                 // Skip single-letter words and common contractions
                 if (token.word.length <= 1) continue;
 
+                // Skip dismissed words
+                if (dismissedWords.has(token.word.toLowerCase())) continue;
+
                 // Skip proper nouns, acronyms, and capitalized names (like VIKRANT)
                 if (isProperNounOrAcronym(token.word, token.start, text)) continue;
 
@@ -751,7 +833,15 @@
                 const firstKey = textCache.keys().next().value;
                 textCache.delete(firstKey);
             }
-            if (activeElement === el) renderUnderlines(el, currentErrors);
+            if (activeElement === el) {
+                renderUnderlines(el, currentErrors);
+
+                // Trigger AI proofreading automatically in background
+                clearTimeout(aiDebounceTimer);
+                aiDebounceTimer = setTimeout(() => {
+                    triggerAISpellCheck(el, text);
+                }, 1200);
+            }
         } catch (err) {
             console.warn('Viky AI local spell check:', err.message);
         }
