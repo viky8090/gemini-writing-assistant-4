@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const showFloatingToggle = document.getElementById('show-floating-toggle');
     const defaultLanguageSelect = document.getElementById('default-language');
     const themeToggle = document.getElementById('theme-toggle');
-    const spellcheckToggle = document.getElementById('spellcheck-toggle');
+
     const clearChatBtn = document.getElementById('clear-chat-btn');
     const imageHistory = document.getElementById('image-history');
     const modelSelector = document.getElementById('model-selector');
@@ -1147,7 +1147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.local.get(['showFloatingButton', 'defaultLanguage', 'theme', 'spellCheckEnabled', 'selectedModel', 'defaultImageStyle', 'floatingButtonBlacklist', 'customTemplates', 'highlightColor', ...waKeys, ...webAssistantKeys], (result) => {
         if (result.showFloatingButton !== undefined) showFloatingToggle.checked = result.showFloatingButton;
         if (result.defaultLanguage) defaultLanguageSelect.value = result.defaultLanguage;
-        if (spellcheckToggle) spellcheckToggle.checked = result.spellCheckEnabled !== false;
+
         const isDark = result.theme !== 'light';
         applyTheme(isDark);
         
@@ -1298,7 +1298,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chrome.storage.local.set({
                 showFloatingButton: showFloatingToggle.checked,
                 defaultLanguage: defaultLanguageSelect.value,
-                spellCheckEnabled: spellcheckToggle.checked,
+
                 selectedModel: modelSelector.value,
                 highlightColor: highlightColorCustom ? highlightColorCustom.value : '#facc15'
             }, () => {
@@ -1368,11 +1368,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (spellcheckToggle) {
-        spellcheckToggle.addEventListener('change', (e) => {
-            chrome.storage.local.set({ spellCheckEnabled: e.target.checked });
-        });
-    }
+
 
     // ===== Web Assistant Toggle / Radio Listeners (instant save) =====
     if (waSearchToggle) {

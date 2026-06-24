@@ -48,8 +48,6 @@
         "<all_urls>"
       ],
       "js": [
-        "lib/typo.js",
-        "spellcheck.js",
         "content.js",
         "web_assistant.js"
       ],

@@ -1287,13 +1287,7 @@
             }
         });
 
-        chrome.storage.local.get(['spellCheckEnabled'], (result) => {
-            const spellEnabled = result.spellCheckEnabled !== false;
-            if (window.__vikySpellCheck) {
-                window.__vikySpellCheck.init(shadowRoot);
-                window.__vikySpellCheck.setEnabled(spellEnabled);
-            }
-        });
+
 
         chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             if (request.action === 'CONTEXT_MENU_ANALYZE') {
@@ -1387,9 +1381,7 @@
             if (changes.highlightColor) {
                 currentHighlightColor = changes.highlightColor.newValue || '#facc15';
             }
-            if (changes.spellCheckEnabled && window.__vikySpellCheck) {
-                window.__vikySpellCheck.setEnabled(changes.spellCheckEnabled.newValue);
-            }
+
         });
     }
 
