@@ -1689,14 +1689,15 @@
                     floatingContainer.style.left = `${floatingContainer._originalLeft}px`;
                     floatingContainer._originalLeft = null;
                 }
-            }, 800);
 
-            clearTimeout(bubbleAutoHideTimer);
-            bubbleAutoHideTimer = setTimeout(() => {
-                if (!floatingContainer.matches(':hover') && !isMenuOpen && !isDisableMenuOpen) {
-                    hideFloatingUI();
-                }
-            }, 5000);
+                // Hide floating UI 2 seconds after it retracts
+                clearTimeout(bubbleAutoHideTimer);
+                bubbleAutoHideTimer = setTimeout(() => {
+                    if (!floatingContainer.matches(':hover') && !isMenuOpen && !isDisableMenuOpen) {
+                        hideFloatingUI();
+                    }
+                }, 2000);
+            }, 800);
         });
 
         floatingContainer.addEventListener('dblclick', (e) => {
